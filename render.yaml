@@ -3,7 +3,7 @@ services:
     name: lendsqr-wallet-service
     runtime: node
     plan: free
-    region: frankfurt
+    region: oregon
     buildCommand: npm ci && npm run build
     # The free plan has no pre-deploy command, so migrations run at start. Knex takes a migration lock, so this is safe.
     startCommand: npm run start:render
@@ -29,5 +29,5 @@ services:
 databases:
   - name: lendsqr-wallet-db
     plan: free
-    region: frankfurt
+    region: oregon
     postgresMajorVersion: '18'
