@@ -77,7 +77,7 @@ export class WalletsService {
   }
 
   // Stands in for a verified payment-provider webhook: money enters from the funding wallet, so the ledger stays balanced.
-  deposit(
+  async deposit(
     user: AuthenticatedUser,
     dto: DepositDto,
     idempotencyKey: string,

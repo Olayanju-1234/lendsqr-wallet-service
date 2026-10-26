@@ -35,7 +35,7 @@ export class TransfersService {
     private readonly idempotency: IdempotencyService,
   ) {}
 
-  transfer(
+  async transfer(
     sender: AuthenticatedUser,
     dto: CreateTransferDto,
     idempotencyKey: string,
