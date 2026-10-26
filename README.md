@@ -4,7 +4,7 @@ A wallet service that creates user accounts, checks them against a blacklist, le
 
 Built with NestJS 12, TypeScript, Knex and PostgreSQL 18. Hosted on Render.
 
-- **Live URL:** https://lendsqr-wallet-service.onrender.com (free tier: the first request after 15 idle minutes takes about a minute)
+- **Live URL:** https://lendsqr-wallet-service-wg2b.onrender.com (free tier: the first request after 15 idle minutes takes about a minute)
 - **Health:** `GET /health`
 
 ## Contents
@@ -125,7 +125,7 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 ### Quick walkthrough with curl
 
 ```bash
-BASE=https://lendsqr-wallet-service.onrender.com
+BASE=https://lendsqr-wallet-service-wg2b.onrender.com
 
 # 1. Two users
 ADA=$(curl -s -X POST $BASE/auth/signup -H 'content-type: application/json' \
