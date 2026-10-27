@@ -88,11 +88,11 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 
 ### Wallets
 
-| Method and path                                | Auth                       | What it does                                                                                |
-| ---------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------- |
-| `GET /wallets/me`                              | Bearer                     | Balance and currency.                                                                       |
-| `GET /wallets/me/transactions?page=1&limit=20` | Bearer                     | Ledger entries, newest first, with `direction`, `balanceAfter` and the counterparty wallet. |
-| `POST /wallets/me/deposits`                    | Bearer + `Idempotency-Key` | Credits the wallet. Body: `{ "amount": 50000 }`. Stands in for a verified payment webhook.  |
+| Method and path                                     | Auth                       | What it does                                                                                                                                                        |
+| --------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /wallets/me`                                   | Bearer                     | Balance and currency.                                                                                                                                               |
+| `GET /wallets/me/transactions?limit=20&cursor=<id>` | Bearer                     | Ledger entries, newest first, with `direction`, `balanceAfter` and the counterparty wallet. Keyset pagination: pass the returned `nextCursor` to get the next page. |
+| `POST /wallets/me/deposits`                         | Bearer + `Idempotency-Key` | Credits the wallet. Body: `{ "amount": 50000 }`. Stands in for a verified payment webhook.                                                                          |
 
 ### Transfers
 
@@ -249,6 +249,7 @@ One Adjutor detail matters: an app that is still in **test mode** answers every 
 - **Admin auth is a shared key.** Enough for the assessment; in production this would be a role on an authenticated staff user with an audit log of who blocked whom.
 - **Idempotency keys never expire.** Stripe keeps them for 24 hours; a scheduled cleanup would be the next step.
 - **Migrations run at start-up** because Render's free plan has no pre-deploy hook. Knex's migration lock makes that safe with one instance; with several instances I would move it to a release step.
+- **History is keyset-paginated** (`WHERE id < cursor ORDER BY id DESC LIMIT n`) rather than offset-paginated: `OFFSET` scans and discards every skipped row, so page 10,000 of a busy wallet would get slower with every page, and a `COUNT(*)` for a total would scan the whole partition. The client gets a `nextCursor` instead of a total.
 - **Pessimistic locking** was chosen over optimistic version columns because a wallet is a natural contention point and a retry loop would add complexity without adding safety here.
 
 ## Project layout

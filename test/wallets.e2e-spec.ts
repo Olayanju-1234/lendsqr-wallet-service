@@ -78,22 +78,38 @@ describe('Wallet deposits and history (e2e)', () => {
     ).rejects.toMatchObject({ code: '23514' });
   });
 
-  it('lists ledger entries newest first with pagination', async () => {
+  it('lists ledger entries newest first with a cursor for the next page', async () => {
     const user = await signupUser(t.url);
     await deposit(user.token, crypto.randomUUID(), 1_000).expect(201);
     await deposit(user.token, crypto.randomUUID(), 2_000).expect(201);
+    await deposit(user.token, crypto.randomUUID(), 3_000).expect(201);
 
-    const res = await request(t.url)
-      .get('/wallets/me/transactions?limit=1')
+    const first = await request(t.url)
+      .get('/wallets/me/transactions?limit=2')
       .set('Authorization', `Bearer ${user.token}`)
       .expect(200);
-
-    expect(res.body.meta).toEqual({ page: 1, limit: 1, total: 2 });
-    expect(res.body.data[0]).toMatchObject({
+    expect(first.body.data.map((e: { amount: number }) => e.amount)).toEqual([
+      3_000, 2_000,
+    ]);
+    expect(first.body.data[0]).toMatchObject({
       type: 'deposit',
       direction: 'credit',
-      amount: 2_000,
-      balanceAfter: 3_000,
+      balanceAfter: 6_000,
     });
+    expect(first.body.nextCursor).toBe(first.body.data[1].id);
+
+    const second = await request(t.url)
+      .get(`/wallets/me/transactions?limit=2&cursor=${first.body.nextCursor}`)
+      .set('Authorization', `Bearer ${user.token}`)
+      .expect(200);
+    expect(second.body.data.map((e: { amount: number }) => e.amount)).toEqual([
+      1_000,
+    ]);
+    expect(second.body.nextCursor).toBeNull();
+
+    await request(t.url)
+      .get('/wallets/me/transactions?limit=0')
+      .set('Authorization', `Bearer ${user.token}`)
+      .expect(400);
   });
 });

@@ -469,7 +469,7 @@
           }
         },
         {
-          "name": "GET /wallets/me/transactions?page=1&limit=20  Ada (200)",
+          "name": "GET /wallets/me/transactions?limit=20  Ada (200)",
           "request": {
             "method": "GET",
             "header": [
@@ -478,7 +478,7 @@
                 "value": "Bearer {{adaToken}}"
               }
             ],
-            "url": "{{baseUrl}}/wallets/me/transactions?page=1&limit=20"
+            "url": "{{baseUrl}}/wallets/me/transactions?limit=20"
           }
         }
       ]

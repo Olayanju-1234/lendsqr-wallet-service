@@ -30,35 +30,30 @@ export class LedgerRepository {
     await trx<LedgerEntryRow>('ledger_entries').insert(entries);
   }
 
-  async listByWallet(
+  // Newest first, keyset on id: WHERE id < cursor uses the (wallet_id, id) index, unlike OFFSET.
+  listByWallet(
     walletId: string,
-    page: number,
     limit: number,
-  ): Promise<{ entries: LedgerEntryWithTransaction[]; total: number }> {
-    const [entries, [{ count }]] = await Promise.all([
-      this.db('ledger_entries as e')
-        .join('transactions as t', 't.id', 'e.transaction_id')
-        .leftJoin('ledger_entries as other', function () {
-          this.on('other.transaction_id', '=', 'e.transaction_id').andOn(
-            'other.wallet_id',
-            '<>',
-            'e.wallet_id',
-          );
-        })
-        .where('e.wallet_id', walletId)
-        .orderBy('e.id', 'desc')
-        .limit(limit)
-        .offset((page - 1) * limit)
-        .select<LedgerEntryWithTransaction[]>(
-          'e.*',
-          't.type',
-          't.description',
-          'other.wallet_id as counterparty_wallet_id',
-        ),
-      this.db('ledger_entries')
-        .where({ wallet_id: walletId })
-        .count<{ count: number }[]>({ count: '*' }),
-    ]);
-    return { entries, total: count };
+    cursor?: number,
+  ): Promise<LedgerEntryWithTransaction[]> {
+    const query = this.db('ledger_entries as e')
+      .join('transactions as t', 't.id', 'e.transaction_id')
+      .leftJoin('ledger_entries as other', function () {
+        this.on('other.transaction_id', '=', 'e.transaction_id').andOn(
+          'other.wallet_id',
+          '<>',
+          'e.wallet_id',
+        );
+      })
+      .where('e.wallet_id', walletId)
+      .orderBy('e.id', 'desc')
+      .limit(limit)
+      .select<LedgerEntryWithTransaction[]>(
+        'e.*',
+        't.type',
+        't.description',
+        'other.wallet_id as counterparty_wallet_id',
+      );
+    return cursor === undefined ? query : query.where('e.id', '<', cursor);
   }
 }

@@ -1,12 +1,13 @@
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
 
-export class PaginationQueryDto {
+// Keyset pagination: the cursor is the id of the last entry the client has seen.
+export class LedgerQueryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(1)
-  page: number = 1;
+  cursor?: number;
 
   @IsOptional()
   @Type(() => Number)

@@ -14,7 +14,7 @@ import { CurrentUser } from '../common/decorators/current-user.decorator.js';
 import { IdempotencyKey } from '../common/decorators/idempotency-key.decorator.js';
 import { sendIdempotent } from '../common/idempotent-replay.js';
 import { DepositDto } from './dto/deposit.dto.js';
-import { PaginationQueryDto } from './dto/pagination-query.dto.js';
+import { LedgerQueryDto } from './dto/ledger-query.dto.js';
 import type { WalletResponse } from './wallet.types.js';
 import {
   DepositResponse,
@@ -35,7 +35,7 @@ export class WalletsController {
   @Get('transactions')
   listMyEntries(
     @CurrentUser() user: AuthenticatedUser,
-    @Query() query: PaginationQueryDto,
+    @Query() query: LedgerQueryDto,
   ): Promise<LedgerPage> {
     return this.wallets.listMyEntries(user.id, query);
   }

@@ -15,7 +15,7 @@ import {
 import { UserStatus } from '../users/user.types.js';
 import { UsersRepository } from '../users/users.repository.js';
 import { DepositDto } from './dto/deposit.dto.js';
-import { PaginationQueryDto } from './dto/pagination-query.dto.js';
+import { LedgerQueryDto } from './dto/ledger-query.dto.js';
 import { LedgerRepository } from './ledger.repository.js';
 import { LedgerService } from './ledger.service.js';
 import {
@@ -42,7 +42,8 @@ export interface DepositResponse {
 
 export interface LedgerPage {
   data: LedgerEntryResponse[];
-  meta: { page: number; limit: number; total: number };
+  // Pass as ?cursor= to get the next page; null when there is none.
+  nextCursor: number | null;
 }
 
 @Injectable()
@@ -64,17 +65,19 @@ export class WalletsService {
 
   async listMyEntries(
     userId: string,
-    { page, limit }: PaginationQueryDto,
+    { cursor, limit }: LedgerQueryDto,
   ): Promise<LedgerPage> {
     const wallet = await this.findWalletOrFail(userId);
-    const { entries, total } = await this.ledgerRepository.listByWallet(
+    // Fetch one extra row to know whether a next page exists without a COUNT(*).
+    const entries = await this.ledgerRepository.listByWallet(
       wallet.id,
-      page,
-      limit,
+      limit + 1,
+      cursor,
     );
+    const page = entries.slice(0, limit);
     return {
-      data: entries.map(toLedgerEntryResponse),
-      meta: { page, limit, total },
+      data: page.map(toLedgerEntryResponse),
+      nextCursor: entries.length > limit ? page[page.length - 1].id : null,
     };
   }
 
