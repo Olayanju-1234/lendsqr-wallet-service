@@ -9,6 +9,7 @@ import type { BlacklistProvider } from './blacklist.provider.js';
 
 interface KarmaLookupResponse {
   status?: string;
+  'mock-response'?: string;
   data?: { karma_identity?: string | null } | null;
 }
 
@@ -52,7 +53,19 @@ export class KarmaBlacklistProvider implements BlacklistProvider {
     }
 
     const body = (await response.json()) as KarmaLookupResponse;
-    return body.status === 'success' && Boolean(body.data?.karma_identity);
+    const hit = body.data?.karma_identity;
+    if (body.status !== 'success' || !hit) {
+      return false;
+    }
+    // An Adjutor app in test mode answers every lookup with the same sample record. Treating that as a hit
+    // would blacklist everyone, so in test mode a hit only counts when it is for the identity we asked about.
+    if (body['mock-response']) {
+      this.logger.warn(
+        'Adjutor app is in test mode: Karma returned a mock record',
+      );
+      return hit.toLowerCase() === identity.toLowerCase();
+    }
+    return true;
   }
 
   private unavailable(): ServiceUnavailableException {

@@ -219,6 +219,8 @@ Money-moving endpoints require an `Idempotency-Key` header, scoped per user. The
 
 `BlacklistService` depends on a `BlacklistProvider` interface. `KarmaBlacklistProvider` calls Adjutor's `GET /verification/karma/{identity}` with a 5-second timeout for the email and the phone number; `MockBlacklistProvider` reads a list from the environment. The check **fails closed**: if Karma times out or errors, signup returns 503 instead of onboarding someone who might be blacklisted. Because the check runs before any row is written, a rejected signup leaves nothing in the database.
 
+One Adjutor detail matters: an app that is still in **test mode** answers every lookup with the same sample record (the response carries a `mock-response` field). Treating that as a hit would blacklist every signup, so in test mode the provider only counts a hit whose `karma_identity` is the identity that was queried. In live mode any returned record is a hit. Both cases are unit-tested with a stubbed `fetch`, and the provider was exercised against the real endpoint with a test-mode key.
+
 ### Block and unblock
 
 `users.status` is `active` or `blocked`, with the reason and time recorded. Blocking is enforced where money moves: deposits and transfers read the user's status inside the transaction under a share lock (see above), so a block takes effect on the very next money operation, not when the token expires. Transfers check the _recipient's_ status too, so a blocked account cannot receive funds either. Read-only routes (`/users/me`, `/wallets/me`) stay available to a blocked user so they can see their status and history.
