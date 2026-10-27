@@ -101,7 +101,7 @@ export class WalletsService {
       }
 
       const wallet = await this.findWalletOrFail(user.id, trx);
-      // Same lock order as transfers: wallets FOR UPDATE first, then the user FOR SHARE.
+      // Same lock order as transfers.
       const locked = await this.wallets.lockByIds(trx, [
         FUNDING_WALLET_ID,
         wallet.id,

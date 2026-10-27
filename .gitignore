@@ -8,5 +8,3 @@ coverage/
 .DS_Store
 .idea/
 .vscode/
-.claude/
-CLAUDE.local.md

@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX } from '../database/database.constants.js';
-import { NewUser, UserRow, UserStatus } from './user.types.js';
+import { type NewUser, type UserRow, UserStatus } from './user.types.js';
 
 @Injectable()
 export class UsersRepository {
@@ -20,8 +20,7 @@ export class UsersRepository {
     return this.db<UserRow>('users').where({ email }).first();
   }
 
-  // SELECT ... FOR SHARE: a concurrent block (an UPDATE on the row) waits until this transaction commits,
-  // and a block that already committed is the version we read. So status cannot change under a transfer.
+  // FOR SHARE: an admin block (UPDATE) waits for us, and one that already committed is what we read.
   lockForShare(trx: Knex.Transaction, ids: string[]): Promise<UserRow[]> {
     return trx<UserRow>('users').whereIn('id', ids).orderBy('id').forShare();
   }

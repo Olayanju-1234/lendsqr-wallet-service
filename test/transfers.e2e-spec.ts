@@ -293,7 +293,6 @@ describe('Transfers (e2e)', () => {
       const recipient = await signupUser(t.url);
       await fund(t.url, sender, 10_000);
 
-      // 50 x 300 = 15,000 requested against 10,000 available: exactly 33 can succeed.
       const responses = await Promise.all(
         Array.from({ length: 50 }, () =>
           transfer(sender, {

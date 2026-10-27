@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  Injectable,
-  UnprocessableEntityException,
-} from '@nestjs/common';
+import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { createHash } from 'node:crypto';
 import type { Knex } from 'knex';
 
@@ -26,8 +22,7 @@ export class IdempotencyService {
     return createHash('sha256').update(JSON.stringify(parts)).digest('hex');
   }
 
-  // Must run inside the same transaction as the money movement: the key and its effect commit or roll back together.
-  // A concurrent duplicate blocks on the unique index until the first transaction finishes, then sees its stored response.
+  // Runs inside the money transaction so the key and its effect commit or roll back together.
   async claim<T>(
     trx: Knex.Transaction,
     userId: string,
@@ -52,9 +47,8 @@ export class IdempotencyService {
       );
     }
     if (!existing || existing.response_body === null) {
-      throw new ConflictException(
-        'A request with this Idempotency-Key is still being processed',
-      );
+      // The key and its response commit together, so a committed key without a response cannot exist.
+      throw new Error(`Idempotency key ${key} has no stored response`);
     }
     return existing.response_body as T;
   }

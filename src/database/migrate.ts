@@ -10,7 +10,7 @@ async function migrate(): Promise<void> {
     throw new Error('DATABASE_URL is required');
   }
 
-  const db = knex(buildKnexConfig(databaseUrl));
+  const db = knex(buildKnexConfig(databaseUrl, { forMigrations: true }));
   try {
     const [batch, applied] = (await db.migrate.latest()) as [number, string[]];
     logger.log(

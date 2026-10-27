@@ -41,7 +41,7 @@ export class EnvironmentVariables {
   @IsEnum(BlacklistProviderName)
   BLACKLIST_PROVIDER: BlacklistProviderName = BlacklistProviderName.Mock;
 
-  @IsUrl({ require_tld: true, protocols: ['https'] })
+  @IsUrl({ require_tld: false })
   ADJUTOR_BASE_URL: string = 'https://adjutor.lendsqr.com/v2';
 
   @ValidateIf(

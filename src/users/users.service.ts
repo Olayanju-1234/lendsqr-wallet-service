@@ -1,9 +1,9 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   BlacklistService,
-  IdentityCheck,
+  type IdentityCheck,
 } from '../blacklist/blacklist.service.js';
-import { toUserResponse, UserResponse, UserStatus } from './user.types.js';
+import { toUserResponse, type UserResponse, UserStatus } from './user.types.js';
 import { UsersRepository } from './users.repository.js';
 
 export interface BlacklistCheckResponse {

@@ -35,7 +35,6 @@ export class SignupDto {
   @Length(1, 100)
   lastName: string;
 
-  // bcrypt only uses the first 72 bytes of a password, so longer ones are rejected rather than silently truncated.
   @IsString()
   @MinLength(8)
   @MaxLength(72)

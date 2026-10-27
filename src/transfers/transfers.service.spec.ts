@@ -7,7 +7,7 @@ import { IdempotencyService } from '../idempotency/idempotency.service.js';
 import { UserStatus } from '../users/user.types.js';
 import { UsersRepository } from '../users/users.repository.js';
 import { LedgerService } from '../wallets/ledger.service.js';
-import { WalletRow, WalletType } from '../wallets/wallet.types.js';
+import { type WalletRow, WalletType } from '../wallets/wallet.types.js';
 import { WalletsRepository } from '../wallets/wallets.repository.js';
 import { TransfersService } from './transfers.service.js';
 
@@ -146,7 +146,7 @@ describe('TransfersService', () => {
     expect(ledger.post).not.toHaveBeenCalled();
   });
 
-  it('rejects a transfer to the sender’s own wallet', async () => {
+  it("rejects a transfer to the sender's own wallet", async () => {
     await expect(
       service.transfer(
         sender,

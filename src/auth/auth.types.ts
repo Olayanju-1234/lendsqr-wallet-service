@@ -1,7 +1,6 @@
 import type { Request } from 'express';
-import type { UserResponse } from '../users/user.types.js';
+import type { UserResponse, UserStatus } from '../users/user.types.js';
 import type { WalletResponse } from '../wallets/wallet.types.js';
-import type { UserStatus } from '../users/user.types.js';
 
 export interface AuthenticatedUser {
   id: string;

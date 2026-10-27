@@ -29,6 +29,7 @@ export class KarmaBlacklistProvider implements BlacklistProvider {
   // Fails closed: if Karma cannot answer, we refuse to onboard rather than risk letting a blacklisted user in.
   async isBlacklisted(identity: string): Promise<boolean> {
     let response: Response;
+    let body: KarmaLookupResponse;
     try {
       response = await fetch(
         `${this.baseUrl}/verification/karma/${encodeURIComponent(identity)}`,
@@ -37,6 +38,13 @@ export class KarmaBlacklistProvider implements BlacklistProvider {
           signal: AbortSignal.timeout(KARMA_TIMEOUT_MS),
         },
       );
+      if (response.status === 404) {
+        return false;
+      }
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      body = (await response.json()) as KarmaLookupResponse;
     } catch (error) {
       this.logger.error(
         `Karma lookup failed: ${error instanceof Error ? error.message : 'unknown error'}`,
@@ -44,15 +52,6 @@ export class KarmaBlacklistProvider implements BlacklistProvider {
       throw this.unavailable();
     }
 
-    if (response.status === 404) {
-      return false;
-    }
-    if (!response.ok) {
-      this.logger.error(`Karma lookup returned HTTP ${response.status}`);
-      throw this.unavailable();
-    }
-
-    const body = (await response.json()) as KarmaLookupResponse;
     const hit = body.data?.karma_identity;
     if (body.status !== 'success' || !hit) {
       return false;

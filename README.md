@@ -24,7 +24,7 @@ Requirements: Node 24, Docker.
 git clone https://github.com/Olayanju-1234/lendsqr-wallet-service.git
 cd lendsqr-wallet-service
 npm ci
-cp .env.example .env        # then set JWT_SECRET and ADMIN_API_KEY to long random strings
+cp .env.example .env        # then set JWT_SECRET and ADMIN_API_KEY; the app refuses to start with the placeholders
 docker compose up -d --wait  # Postgres 18 on localhost:5433 with the wallet and wallet_test databases
 npm run build && npm run db:migrate
 npm run start:dev
@@ -40,21 +40,29 @@ npm run lint && npm run typecheck
 
 Environment variables (validated at boot; the app refuses to start if one is wrong):
 
-| Variable                              | Purpose                                                                 |
-| ------------------------------------- | ----------------------------------------------------------------------- |
-| `DATABASE_URL`                        | Postgres connection string                                              |
-| `JWT_SECRET`                          | 32+ characters; signs access tokens                                     |
-| `JWT_EXPIRES_IN_SECONDS`              | Token lifetime, default 3600                                            |
-| `ADMIN_API_KEY`                       | 16+ characters; sent as `x-admin-key` on `/admin` routes                |
-| `BLACKLIST_PROVIDER`                  | `karma` (Lendsqr Adjutor Karma) or `mock`                               |
-| `ADJUTOR_BASE_URL`, `ADJUTOR_API_KEY` | Used when the provider is `karma`                                       |
-| `MOCK_BLACKLIST`                      | Comma-separated emails and phone numbers the mock treats as blacklisted |
+| Variable                              | Purpose                                                                              |
+| ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `DATABASE_URL`                        | Postgres connection string                                                           |
+| `JWT_SECRET`                          | 32+ characters; signs access tokens                                                  |
+| `JWT_EXPIRES_IN_SECONDS`              | Token lifetime, default 3600                                                         |
+| `ADMIN_API_KEY`                       | 16+ characters; sent as `x-admin-key` on `/admin` routes                             |
+| `BLACKLIST_PROVIDER`                  | `karma` (Lendsqr Adjutor Karma) or `mock`                                            |
+| `ADJUTOR_BASE_URL`, `ADJUTOR_API_KEY` | Used when the provider is `karma`                                                    |
+| `MOCK_BLACKLIST`                      | Comma-separated emails and phone numbers the mock treats as blacklisted              |
+| `TEST_DATABASE_URL`                   | Used by `npm run test:e2e`; defaults to the `wallet_test` database in docker-compose |
 
 The hosted instance runs with the mock provider so the behaviour can be demonstrated: signing up with `blacklisted@example.com` or `+2348000000000` is refused. Switching `BLACKLIST_PROVIDER=karma` and setting `ADJUTOR_API_KEY` calls the real Karma lookup with no code change.
 
 ## API
 
 All amounts are integers in **kobo** (₦1 = 100 kobo). Requests and responses are JSON. Errors use NestJS's standard shape: `{ "statusCode": 422, "message": "Insufficient funds", "error": "Unprocessable Entity" }`.
+
+### Service
+
+| Method and path | Auth | What it does                                                                |
+| --------------- | ---- | --------------------------------------------------------------------------- |
+| `GET /`         | none | Service name and a link to this README.                                     |
+| `GET /health`   | none | Runs `select 1` against the database; `{ "status": "ok" }` when it answers. |
 
 ### Accounts
 
@@ -88,7 +96,7 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 
 ### Transfers
 
-`POST /transfers` with a Bearer token and an `Idempotency-Key` header (8 to 255 characters; a UUID works).
+`POST /transfers` with a Bearer token and an `Idempotency-Key` header (8 to 255 characters from `A-Z a-z 0-9 - _`; a UUID works).
 
 ```json
 {
@@ -117,17 +125,16 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 | `400`  | Validation error, missing `Idempotency-Key`, or transfer to your own wallet.                                      |
 | `403`  | Sender or recipient is blocked.                                                                                   |
 | `404`  | Recipient wallet does not exist.                                                                                  |
-| `409`  | A request with this key is still in flight.                                                                       |
 | `422`  | Insufficient funds, or the key was already used with a different body.                                            |
 
 ### Admin
 
-| Method and path                        | Auth          | What it does                                                                                                                                                              |
-| -------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /admin/users/:id/blacklist-check` | `x-admin-key` | Re-runs the blacklist check on an existing user's email and phone and reports the result, for someone reported after onboarding. Blocking stays an explicit admin action. |
-| \1                                     | `x-admin-key` | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit.                                                                                      |
-| `POST /admin/users/:id/unblock`        | `x-admin-key` | Restores the user.                                                                                                                                                        |
-| `GET /admin/reconciliation`            | `x-admin-key` | Checks the ledger invariants and reports anything out of balance (see [Reconciliation](#reconciliation)).                                                                 |
+| Method and path                        | Auth                          | What it does                                                                                                                                                              |
+| -------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /admin/users/:id/blacklist-check` | `x-admin-key`                 | Re-runs the blacklist check on an existing user's email and phone and reports the result, for someone reported after onboarding. Blocking stays an explicit admin action. |
+|                                        | `POST /admin/users/:id/block` | `x-admin-key`                                                                                                                                                             | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit. |
+| `POST /admin/users/:id/unblock`        | `x-admin-key`                 | Restores the user.                                                                                                                                                        |
+| `GET /admin/reconciliation`            | `x-admin-key`                 | Checks the ledger invariants and reports anything out of balance (see [Reconciliation](#reconciliation)).                                                                 |
 
 ### Quick walkthrough with curl
 
@@ -204,7 +211,7 @@ A transfer runs in one database transaction:
 
 User status is also read inside the transaction under a share lock rather than taken from the token or the request guard. An admin block is an `UPDATE` on that row, so it waits for an in-flight transfer to commit, and a transfer that starts after the block sees it. The e2e suite holds an uncommitted block, fires a transfer, commits the block and asserts the transfer is refused.
 
-The e2e suite fires 50 parallel transfers of ₦300 from a wallet holding ₦10,000 and asserts exactly 33 succeed, 17 fail with 422, and the final balances are ₦100 and ₦9,900. A second test runs 40 interleaved A→B and B→A transfers and asserts all succeed.
+The e2e suite fires 50 parallel transfers of 300 kobo from a wallet holding 10,000 kobo and asserts exactly 33 succeed, 17 fail with 422, and the final balances are 100 and 9,900 kobo. A second test runs 40 interleaved A→B and B→A transfers and asserts all succeed.
 
 ### Idempotency and replay protection
 
@@ -212,7 +219,7 @@ Money-moving endpoints require an `Idempotency-Key` header, scoped per user. The
 
 - **First request:** the insert succeeds, the transfer runs, the response is stored on the key, everything commits together.
 - **Replay after completion:** the insert conflicts, the stored response is returned with `Idempotent-Replayed: true`. No locks are taken and nothing moves.
-- **Concurrent duplicate:** the second insert blocks on the unique index until the first transaction commits, then reads the stored response. Ten simultaneous requests with the same key produce one transfer; the test covers it.
+- **Concurrent duplicate:** the second insert blocks on the unique index until the first transaction commits, then reads the stored response. There is no "in progress" status to return: by the time the second request can read the key, the first has either committed with its response or rolled back. Ten simultaneous requests with the same key produce one transfer; the test covers it.
 - **Same key, different body:** a hash of the request is stored with the key; a mismatch returns 422 rather than silently returning an unrelated response.
 - **Failed attempt:** the transaction rolls back, which also removes the key, so the client can retry the same key after fixing the cause (for example, after funding the wallet).
 
@@ -253,9 +260,10 @@ src/
 ├── common/        decorators (CurrentUser, IdempotencyKey), admin guard, replay header
 ├── config/        environment validation
 ├── database/      Knex module, migrations, migrate script
+├── health/        root and health endpoints
 ├── idempotency/   key claim and completion
 ├── transfers/     transfer endpoint and service
-├── users/         profile, admin block/unblock
-└── wallets/       wallet, deposits, ledger posting, history
+├── users/         profile, admin block/unblock/blacklist-check
+└── wallets/       wallet, deposits, ledger posting, history, reconciliation
 test/              e2e specs: accounts, deposits, transfers, concurrency
 ```

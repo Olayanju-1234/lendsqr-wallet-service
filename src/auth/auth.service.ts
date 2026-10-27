@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -13,7 +14,7 @@ import { BlacklistService } from '../blacklist/blacklist.service.js';
 import { isUniqueViolation } from '../common/postgres-errors.js';
 import type { EnvironmentVariables } from '../config/env.validation.js';
 import { KNEX } from '../database/database.constants.js';
-import { toUserResponse, UserRow } from '../users/user.types.js';
+import { toUserResponse, type UserRow } from '../users/user.types.js';
 import { UsersRepository } from '../users/users.repository.js';
 import { toWalletResponse } from '../wallets/wallet.types.js';
 import { WalletsRepository } from '../wallets/wallets.repository.js';
@@ -44,6 +45,10 @@ export class AuthService {
   }
 
   async signup(dto: SignupDto): Promise<SignupResponse> {
+    // bcrypt hashes at most 72 bytes; MaxLength counts characters, so multi-byte passwords need this check.
+    if (bcrypt.truncates(dto.password)) {
+      throw new BadRequestException('password must be at most 72 bytes');
+    }
     await this.blacklist.assertCanOnboard([dto.email, dto.phoneNumber]);
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 

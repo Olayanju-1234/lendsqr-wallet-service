@@ -12,7 +12,7 @@ import {
 import { AdminKeyGuard } from '../common/guards/admin-key.guard.js';
 import { BlockUserDto } from './dto/block-user.dto.js';
 import type { UserResponse } from './user.types.js';
-import { BlacklistCheckResponse, UsersService } from './users.service.js';
+import { type BlacklistCheckResponse, UsersService } from './users.service.js';
 
 @Controller('admin/users')
 @UseGuards(AdminKeyGuard)

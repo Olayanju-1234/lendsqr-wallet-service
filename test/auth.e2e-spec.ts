@@ -36,6 +36,7 @@ describe('Accounts and user management (e2e)', () => {
       status: 'active',
     });
     expect(res.body.user).not.toHaveProperty('passwordHash');
+    expect(res.body.user).not.toHaveProperty('password_hash');
     expect(res.body.wallet).toMatchObject({ currency: 'NGN', balance: 0 });
     expect(res.body.accessToken).toEqual(expect.any(String));
   });

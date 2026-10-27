@@ -1,6 +1,6 @@
 export const FUNDING_WALLET_ID = '00000000-0000-4000-8000-000000000001';
 
-// ₦10,000,000 in kobo. Keeps every amount and balance well inside Number.MAX_SAFE_INTEGER.
+// ₦10,000,000 in kobo per operation. Balances are not capped; parsing bigint to number is exact below 2^53.
 export const MAX_AMOUNT_KOBO = 1_000_000_000;
 
 export enum WalletType {

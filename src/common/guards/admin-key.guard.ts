@@ -25,7 +25,7 @@ export class AdminKeyGuard implements CanActivate {
       .switchToHttp()
       .getRequest<Request>()
       .header('x-admin-key');
-    // Hashing first gives equal-length buffers, so the comparison takes the same time whatever was sent.
+    // Hash first: timingSafeEqual needs equal lengths.
     if (!provided || !timingSafeEqual(sha256(provided), this.expected)) {
       throw new UnauthorizedException('Invalid admin key');
     }

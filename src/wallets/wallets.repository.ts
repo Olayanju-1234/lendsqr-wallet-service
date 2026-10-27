@@ -1,7 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import type { Knex } from 'knex';
 import { KNEX } from '../database/database.constants.js';
-import { WalletRow, WalletType } from './wallet.types.js';
+import { type WalletRow, WalletType } from './wallet.types.js';
 
 @Injectable()
 export class WalletsRepository {
@@ -24,8 +24,7 @@ export class WalletsRepository {
     return db<WalletRow>('wallets').where({ user_id: userId }).first();
   }
 
-  // SELECT ... FOR UPDATE. Ordering by id means every transaction takes the same locks in the same
-  // order, so two transfers between the same pair of wallets queue up instead of deadlocking.
+  // Locked in id order so A->B and B->A never deadlock.
   lockByIds(trx: Knex.Transaction, ids: string[]): Promise<WalletRow[]> {
     return trx<WalletRow>('wallets')
       .whereIn('id', ids)
@@ -33,8 +32,6 @@ export class WalletsRepository {
       .forUpdate();
   }
 
-  // Relative update done by the database, never "read balance, add in JS, write back". The CHECK
-  // constraint on the table rejects any update that would take a user wallet below zero.
   async adjustBalance(
     trx: Knex.Transaction,
     id: string,

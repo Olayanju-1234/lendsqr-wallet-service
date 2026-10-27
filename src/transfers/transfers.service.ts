@@ -52,8 +52,7 @@ export class TransfersService {
       description,
     ]);
 
-    // One transaction holds the idempotency claim, both wallet locks and the ledger write. If anything
-    // throws, all of it rolls back, including the claim, so a failed attempt can be retried with the same key.
+    // Claim, locks, ledger write and stored response commit or roll back as one unit.
     return this.db.transaction(async (trx) => {
       const stored = await this.idempotency.claim<TransferResponse>(
         trx,
@@ -86,11 +85,10 @@ export class TransfersService {
         throw new UnprocessableEntityException('Wallet currencies differ');
       }
 
-      // Status is read under a share lock inside the transaction, not from the token or the auth guard,
-      // so a block that lands while this transfer is in flight either waits for it or is seen by it.
       if (!target.user_id) {
-        throw new Error(`User wallet ${target.id} has no owner`);
+        throw new Error(`wallet ${target.id} has no owner`);
       }
+      // Status read under lock inside the transaction, not from the guard: a concurrent block waits or is seen.
       const parties = await this.users.lockForShare(trx, [
         sender.id,
         target.user_id,
@@ -105,7 +103,6 @@ export class TransfersService {
         throw new ForbiddenException('The recipient cannot receive transfers');
       }
 
-      // Checked against the locked row: nobody else can change this balance until we commit.
       if (source.balance < dto.amount) {
         throw new UnprocessableEntityException('Insufficient funds');
       }
