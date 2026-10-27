@@ -97,15 +97,16 @@ export class WalletsService {
         return { replayed: true, body: stored };
       }
 
-      const [owner] = await this.users.lockForShare(trx, [user.id]);
-      if (owner?.status !== UserStatus.Active) {
-        throw new ForbiddenException('Your account is blocked');
-      }
       const wallet = await this.findWalletOrFail(user.id, trx);
+      // Same lock order as transfers: wallets FOR UPDATE first, then the user FOR SHARE.
       const locked = await this.wallets.lockByIds(trx, [
         FUNDING_WALLET_ID,
         wallet.id,
       ]);
+      const [owner] = await this.users.lockForShare(trx, [user.id]);
+      if (owner?.status !== UserStatus.Active) {
+        throw new ForbiddenException('Your account is blocked');
+      }
       const funding = locked.find((row) => row.id === FUNDING_WALLET_ID);
       const target = locked.find((row) => row.id === wallet.id);
       if (!funding || !target) {

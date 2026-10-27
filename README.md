@@ -39,15 +39,15 @@ npm run lint && npm run typecheck
 
 Environment variables (validated at boot; the app refuses to start if one is wrong):
 
-| Variable | Purpose |
-|---|---|
-| `DATABASE_URL` | Postgres connection string |
-| `JWT_SECRET` | 32+ characters; signs access tokens |
-| `JWT_EXPIRES_IN_SECONDS` | Token lifetime, default 3600 |
-| `ADMIN_API_KEY` | 16+ characters; sent as `x-admin-key` on `/admin` routes |
-| `BLACKLIST_PROVIDER` | `karma` (Lendsqr Adjutor Karma) or `mock` |
-| `ADJUTOR_BASE_URL`, `ADJUTOR_API_KEY` | Used when the provider is `karma` |
-| `MOCK_BLACKLIST` | Comma-separated emails and phone numbers the mock treats as blacklisted |
+| Variable                              | Purpose                                                                 |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| `DATABASE_URL`                        | Postgres connection string                                              |
+| `JWT_SECRET`                          | 32+ characters; signs access tokens                                     |
+| `JWT_EXPIRES_IN_SECONDS`              | Token lifetime, default 3600                                            |
+| `ADMIN_API_KEY`                       | 16+ characters; sent as `x-admin-key` on `/admin` routes                |
+| `BLACKLIST_PROVIDER`                  | `karma` (Lendsqr Adjutor Karma) or `mock`                               |
+| `ADJUTOR_BASE_URL`, `ADJUTOR_API_KEY` | Used when the provider is `karma`                                       |
+| `MOCK_BLACKLIST`                      | Comma-separated emails and phone numbers the mock treats as blacklisted |
 
 The hosted instance runs with the mock provider so the behaviour can be demonstrated: signing up with `blacklisted@example.com` or `+2348000000000` is refused. Switching `BLACKLIST_PROVIDER=karma` and setting `ADJUTOR_API_KEY` calls the real Karma lookup with no code change.
 
@@ -57,11 +57,11 @@ All amounts are integers in **kobo** (₦1 = 100 kobo). Requests and responses a
 
 ### Accounts
 
-| Method and path | Auth | What it does |
-|---|---|---|
-| `POST /auth/signup` | none | Creates a user and their NGN wallet after the blacklist check. Returns the user, the wallet and an access token. |
-| `POST /auth/login` | none | Returns an access token. |
-| `GET /users/me` | Bearer | The caller's profile and status. |
+| Method and path     | Auth   | What it does                                                                                                     |
+| ------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| `POST /auth/signup` | none   | Creates a user and their NGN wallet after the blacklist check. Returns the user, the wallet and an access token. |
+| `POST /auth/login`  | none   | Returns an access token.                                                                                         |
+| `GET /users/me`     | Bearer | The caller's profile and status.                                                                                 |
 
 Signup body:
 
@@ -79,18 +79,22 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 
 ### Wallets
 
-| Method and path | Auth | What it does |
-|---|---|---|
-| `GET /wallets/me` | Bearer | Balance and currency. |
-| `GET /wallets/me/transactions?page=1&limit=20` | Bearer | Ledger entries, newest first, with `direction`, `balanceAfter` and the counterparty wallet. |
-| `POST /wallets/me/deposits` | Bearer + `Idempotency-Key` | Credits the wallet. Body: `{ "amount": 50000 }`. Stands in for a verified payment webhook. |
+| Method and path                                | Auth                       | What it does                                                                                |
+| ---------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------- |
+| `GET /wallets/me`                              | Bearer                     | Balance and currency.                                                                       |
+| `GET /wallets/me/transactions?page=1&limit=20` | Bearer                     | Ledger entries, newest first, with `direction`, `balanceAfter` and the counterparty wallet. |
+| `POST /wallets/me/deposits`                    | Bearer + `Idempotency-Key` | Credits the wallet. Body: `{ "amount": 50000 }`. Stands in for a verified payment webhook.  |
 
 ### Transfers
 
 `POST /transfers` with a Bearer token and an `Idempotency-Key` header (8 to 255 characters; a UUID works).
 
 ```json
-{ "recipientWalletId": "e1962497-b3d0-46a0-97d7-fe085bf58dcc", "amount": 2500, "description": "Lunch" }
+{
+  "recipientWalletId": "e1962497-b3d0-46a0-97d7-fe085bf58dcc",
+  "amount": 2500,
+  "description": "Lunch"
+}
 ```
 
 ```json
@@ -106,21 +110,21 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 }
 ```
 
-| Status | When |
-|---|---|
-| `201` | Transfer applied. A replay of the same key returns the original body with the header `Idempotent-Replayed: true`. |
-| `400` | Validation error, missing `Idempotency-Key`, or transfer to your own wallet. |
-| `403` | Sender or recipient is blocked. |
-| `404` | Recipient wallet does not exist. |
-| `409` | A request with this key is still in flight. |
-| `422` | Insufficient funds, or the key was already used with a different body. |
+| Status | When                                                                                                              |
+| ------ | ----------------------------------------------------------------------------------------------------------------- |
+| `201`  | Transfer applied. A replay of the same key returns the original body with the header `Idempotent-Replayed: true`. |
+| `400`  | Validation error, missing `Idempotency-Key`, or transfer to your own wallet.                                      |
+| `403`  | Sender or recipient is blocked.                                                                                   |
+| `404`  | Recipient wallet does not exist.                                                                                  |
+| `409`  | A request with this key is still in flight.                                                                       |
+| `422`  | Insufficient funds, or the key was already used with a different body.                                            |
 
 ### Admin
 
-| Method and path | Auth | What it does |
-|---|---|---|
-| `POST /admin/users/:id/block` | `x-admin-key` | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit. |
-| `POST /admin/users/:id/unblock` | `x-admin-key` | Restores the user. |
+| Method and path                 | Auth          | What it does                                                                         |
+| ------------------------------- | ------------- | ------------------------------------------------------------------------------------ |
+| `POST /admin/users/:id/block`   | `x-admin-key` | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit. |
+| `POST /admin/users/:id/unblock` | `x-admin-key` | Restores the user.                                                                   |
 
 ### Quick walkthrough with curl
 
@@ -152,7 +156,7 @@ Floating point cannot represent 0.1 exactly, and `DECIMAL` columns come back fro
 
 ### Double-entry ledger
 
-Every movement is a `transactions` row plus two `ledger_entries` rows: a negative one for the wallet that pays and a positive one for the wallet that receives, each recording `balance_after`. Deposits debit a system *funding* wallet, so the sum of all balances is always zero and any wallet's balance can be recomputed from its entries. The e2e suite asserts both invariants after the concurrency tests. The `wallets.balance` column is a cached total so reads do not aggregate the ledger.
+Every movement is a `transactions` row plus two `ledger_entries` rows: a negative one for the wallet that pays and a positive one for the wallet that receives, each recording `balance_after`. Deposits debit a system _funding_ wallet, so the sum of all balances is always zero and any wallet's balance can be recomputed from its entries. The e2e suite asserts both invariants after the concurrency tests. The `wallets.balance` column is a cached total so reads do not aggregate the ledger.
 
 ### Concurrency: row locks in a consistent order
 
@@ -166,7 +170,7 @@ A transfer runs in one database transaction:
 6. store the response against the key;
 7. commit.
 
-`FOR UPDATE` makes concurrent transfers that touch the same wallet queue up, so a balance check can never be based on a stale read. Locking in id order means a transfer from A to B and one from B to A acquire the same locks in the same order, so Postgres never has to abort one for deadlock. Balances are adjusted *relatively in SQL*, never read into the application, modified and written back, so the arithmetic cannot lose an update even if a future change dropped the lock. The database adds a last line of defence: `CHECK (balance >= 0)` on user wallets, so even a bug in this code could not overdraw a wallet.
+`FOR UPDATE` makes concurrent transfers that touch the same wallet queue up, so a balance check can never be based on a stale read. Locking in id order means a transfer from A to B and one from B to A acquire the same locks in the same order, so Postgres never has to abort one for deadlock. Balances are adjusted _relatively in SQL_, never read into the application, modified and written back, so the arithmetic cannot lose an update even if a future change dropped the lock. The database adds a last line of defence: `CHECK (balance >= 0)` on user wallets, so even a bug in this code could not overdraw a wallet.
 
 User status is also read inside the transaction under a share lock rather than taken from the token or the request guard. An admin block is an `UPDATE` on that row, so it waits for an in-flight transfer to commit, and a transfer that starts after the block sees it. The e2e suite holds an uncommitted block, fires a transfer, commits the block and asserts the transfer is refused.
 
@@ -174,7 +178,7 @@ The e2e suite fires 50 parallel transfers of ₦300 from a wallet holding ₦10,
 
 ### Idempotency and replay protection
 
-Money-moving endpoints require an `Idempotency-Key` header, scoped per user. The key is inserted into `idempotency_keys` with `ON CONFLICT DO NOTHING` *inside the same transaction* as the transfer:
+Money-moving endpoints require an `Idempotency-Key` header, scoped per user. The key is inserted into `idempotency_keys` with `ON CONFLICT DO NOTHING` _inside the same transaction_ as the transfer:
 
 - **First request:** the insert succeeds, the transfer runs, the response is stored on the key, everything commits together.
 - **Replay after completion:** the insert conflicts, the stored response is returned with `Idempotent-Replayed: true`. No locks are taken and nothing moves.
@@ -188,7 +192,7 @@ Money-moving endpoints require an `Idempotency-Key` header, scoped per user. The
 
 ### Block and unblock
 
-`users.status` is `active` or `blocked`, with the reason and time recorded. The auth guard reloads the user from the database on every request rather than trusting the status in the token, so a block takes effect on the next request, not when the token expires. Transfers also check the *recipient's* status inside the transaction, so a blocked account cannot receive funds either.
+`users.status` is `active` or `blocked`, with the reason and time recorded. Blocking is enforced where money moves: deposits and transfers read the user's status inside the transaction under a share lock (see above), so a block takes effect on the very next money operation, not when the token expires. Transfers check the _recipient's_ status too, so a blocked account cannot receive funds either. Read-only routes (`/users/me`, `/wallets/me`) stay available to a blocked user so they can see their status and history.
 
 ### Security defaults
 
@@ -196,6 +200,7 @@ Money-moving endpoints require an `Idempotency-Key` header, scoped per user. The
 - JWT access tokens with a one-hour lifetime; admin routes use a separate key compared in constant time.
 - `ValidationPipe` with `whitelist` and `forbidNonWhitelisted`: unknown fields are rejected, so nobody can post `status: "active"` or `balance`.
 - `helmet` headers, `trust proxy` for correct client IPs behind Render, and a rate limit of 10 requests per minute per IP on signup and login.
+- Postgres `statement_timeout`, `lock_timeout` and `idle_in_transaction_session_timeout` are set per connection, so a stuck request cannot hold a wallet lock indefinitely.
 - Secrets come from the environment and are validated at boot.
 
 ## Trade-offs and what I would do next

@@ -84,9 +84,12 @@ export class TransfersService {
 
       // Status is read under a share lock inside the transaction, not from the token or the auth guard,
       // so a block that lands while this transfer is in flight either waits for it or is seen by it.
+      if (!target.user_id) {
+        throw new Error(`User wallet ${target.id} has no owner`);
+      }
       const parties = await this.users.lockForShare(trx, [
         sender.id,
-        target.user_id ?? '',
+        target.user_id,
       ]);
       if (
         parties.find((u) => u.id === sender.id)?.status !== UserStatus.Active

@@ -11,6 +11,10 @@ import {
 import { MAX_AMOUNT_KOBO } from '../../wallets/wallet.types.js';
 
 export class CreateTransferDto {
+  // Postgres returns uuids in lower case; normalise so comparisons and the request hash are stable.
+  @Transform(({ value }: { value: unknown }) =>
+    typeof value === 'string' ? value.toLowerCase() : value,
+  )
   @IsUUID()
   recipientWalletId: string;
 

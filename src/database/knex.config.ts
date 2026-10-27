@@ -11,7 +11,17 @@ export function buildKnexConfig(databaseUrl: string): Knex.Config {
   return {
     client: 'pg',
     connection: databaseUrl,
-    pool: { min: 0, max: 10 },
+    pool: {
+      min: 0,
+      max: 10,
+      // A stuck transaction must not hold a wallet lock forever; lock waits and statements are bounded.
+      afterCreate: (conn: pg.Client, done: (err?: Error) => void) => {
+        conn.query(
+          'SET statement_timeout = 15000; SET lock_timeout = 10000; SET idle_in_transaction_session_timeout = 30000',
+          (err?: Error) => done(err),
+        );
+      },
+    },
     migrations: { migrationSource },
   };
 }
