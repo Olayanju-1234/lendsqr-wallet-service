@@ -154,7 +154,7 @@ done
 
 ### Money is an integer in kobo, stored as `bigint`
 
-Floating point cannot represent 0.1 exactly, and `DECIMAL` columns come back from the driver as strings that are easy to mishandle. Integers in the smallest unit are exact, compare correctly and add correctly. Amounts are capped at ₦10,000,000 per operation so every value stays far inside JavaScript's safe-integer range; the `pg` driver is told to parse `bigint` columns as numbers on that basis.
+Floating point cannot represent 0.1 exactly, and `DECIMAL` columns come back from the driver as strings that are easy to mishandle. Integers in the smallest unit are exact, compare correctly and add correctly. The rule is "integer in the currency's minor unit" (the ISO 4217 exponent): NGN has exponent 2, so amounts are kobo; a zero-decimal currency such as JPY or XOF has exponent 0, so amounts would be whole units and nothing in the ledger changes. Only display formatting depends on the exponent, and the API leaves that to the client. Amounts are capped at ₦10,000,000 per operation so every value stays far inside JavaScript's safe-integer range; the `pg` driver is told to parse `bigint` columns as numbers on that basis.
 
 ### Double-entry ledger
 
