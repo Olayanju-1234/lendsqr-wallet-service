@@ -84,6 +84,9 @@ export class WalletsService {
     dto: DepositDto,
     idempotencyKey: string,
   ): Promise<IdempotentResult<DepositResponse>> {
+    if (user.status !== UserStatus.Active) {
+      throw new ForbiddenException('Your account is blocked');
+    }
     const requestHash = this.idempotency.hashRequest(['deposit', dto.amount]);
 
     return this.db.transaction(async (trx) => {

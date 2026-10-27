@@ -122,6 +122,17 @@ describe('TransfersService', () => {
     expect(ledger.post).not.toHaveBeenCalled();
   });
 
+  it('fails fast on a sender the guard already knows is blocked', async () => {
+    await expect(
+      service.transfer(
+        { ...sender, status: UserStatus.Blocked },
+        { recipientWalletId: RECIPIENT_WALLET, amount: 1 },
+        'key-12345678',
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(db.transaction).not.toHaveBeenCalled();
+  });
+
   it('rejects a sender whose locked row says blocked, even if the token said active', async () => {
     users.lockForShare.mockResolvedValue([
       { id: 'recipient-id', status: UserStatus.Active },

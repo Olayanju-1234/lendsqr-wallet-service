@@ -40,6 +40,10 @@ export class TransfersService {
     dto: CreateTransferDto,
     idempotencyKey: string,
   ): Promise<IdempotentResult<TransferResponse>> {
+    // Fast fail on what the guard already knows. Not authoritative: the real check is under the share lock below.
+    if (sender.status !== UserStatus.Active) {
+      throw new ForbiddenException('Your account is blocked');
+    }
     const description = dto.description || null;
     const requestHash = this.idempotency.hashRequest([
       'transfer',

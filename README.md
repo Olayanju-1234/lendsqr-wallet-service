@@ -12,6 +12,7 @@ Built with NestJS 12, TypeScript, Knex and PostgreSQL 18. Hosted on Render.
 - [Setup](#setup)
 - [API](#api)
 - [Design decisions](#design-decisions)
+  - [Reconciliation](#reconciliation)
 - [Trade-offs and what I would do next](#trade-offs-and-what-i-would-do-next)
 - [Project layout](#project-layout)
 
@@ -121,10 +122,11 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 
 ### Admin
 
-| Method and path                 | Auth          | What it does                                                                         |
-| ------------------------------- | ------------- | ------------------------------------------------------------------------------------ |
-| `POST /admin/users/:id/block`   | `x-admin-key` | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit. |
-| `POST /admin/users/:id/unblock` | `x-admin-key` | Restores the user.                                                                   |
+| Method and path                 | Auth          | What it does                                                                                              |
+| ------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------- |
+| `POST /admin/users/:id/block`   | `x-admin-key` | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit.                      |
+| `POST /admin/users/:id/unblock` | `x-admin-key` | Restores the user.                                                                                        |
+| `GET /admin/reconciliation`     | `x-admin-key` | Checks the ledger invariants and reports anything out of balance (see [Reconciliation](#reconciliation)). |
 
 ### Quick walkthrough with curl
 
@@ -157,6 +159,33 @@ Floating point cannot represent 0.1 exactly, and `DECIMAL` columns come back fro
 ### Double-entry ledger
 
 Every movement is a `transactions` row plus two `ledger_entries` rows: a negative one for the wallet that pays and a positive one for the wallet that receives, each recording `balance_after`. Deposits debit a system _funding_ wallet, so the sum of all balances is always zero and any wallet's balance can be recomputed from its entries. The e2e suite asserts both invariants after the concurrency tests. The `wallets.balance` column is a cached total so reads do not aggregate the ledger.
+
+### Reconciliation
+
+Because every movement is double-entry, the whole ledger can be audited with four queries, which `GET /admin/reconciliation` runs in one `REPEATABLE READ` snapshot:
+
+| Check                                                                                     | Expected |
+| ----------------------------------------------------------------------------------------- | -------- |
+| `sum(wallets.balance)`                                                                    | `0`      |
+| wallets whose `balance` differs from `sum(ledger_entries.amount)`                         | none     |
+| transactions without exactly one debit and one credit of `transactions.amount`            | none     |
+| ledger entries whose `balance_after` differs from the running sum of the wallet's entries | none     |
+
+```json
+{
+  "ok": true,
+  "checkedAt": "…",
+  "wallets": 42,
+  "transactions": 120,
+  "ledgerEntries": 240,
+  "sumOfBalances": 0,
+  "walletsOutOfBalance": [],
+  "unbalancedTransactions": [],
+  "entriesWithWrongRunningBalance": []
+}
+```
+
+The e2e suite runs it after a burst of concurrent transfers and also corrupts a cached balance by hand to prove the report catches it. In production this would run on a schedule and page someone when `ok` is false.
 
 ### Concurrency: row locks in a consistent order
 

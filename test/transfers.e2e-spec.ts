@@ -241,6 +241,52 @@ describe('Transfers (e2e)', () => {
     });
   });
 
+  describe('reconciliation', () => {
+    const reconcile = () =>
+      request(t.url).get('/admin/reconciliation').set('x-admin-key', ADMIN_KEY);
+
+    it('needs the admin key', async () => {
+      await request(t.url).get('/admin/reconciliation').expect(401);
+    });
+
+    it('reports a clean ledger after a burst of concurrent transfers', async () => {
+      const alice = await signupUser(t.url);
+      const bob = await signupUser(t.url);
+      await fund(t.url, alice, 5_000);
+      await Promise.all(
+        Array.from({ length: 20 }, () =>
+          transfer(alice, { recipientWalletId: bob.walletId, amount: 300 }),
+        ),
+      );
+
+      const res = await reconcile().expect(200);
+      expect(res.body).toMatchObject({
+        ok: true,
+        sumOfBalances: 0,
+        walletsOutOfBalance: [],
+        unbalancedTransactions: [],
+        entriesWithWrongRunningBalance: [],
+      });
+      expect(res.body.transactions).toBe(17); // 1 deposit + 16 transfers that fit in 5,000
+      expect(res.body.ledgerEntries).toBe(34);
+    });
+
+    it('detects a balance that no longer matches its ledger', async () => {
+      const alice = await signupUser(t.url);
+      await fund(t.url, alice, 1_000);
+      // Corrupt the cached balance directly, bypassing the service.
+      await t
+        .db('wallets')
+        .where({ id: alice.walletId })
+        .update({ balance: 999 });
+
+      const res = await reconcile().expect(200);
+      expect(res.body.ok).toBe(false);
+      expect(res.body.walletsOutOfBalance).toEqual([alice.walletId]);
+      expect(res.body.sumOfBalances).toBe(-1);
+    });
+  });
+
   describe('concurrency', () => {
     it('never overdraws under 50 parallel transfers', async () => {
       const sender = await signupUser(t.url);
