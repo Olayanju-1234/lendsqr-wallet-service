@@ -1,0 +1,494 @@
+{
+  "info": {
+    "name": "Lendsqr wallet service",
+    "description": "Manual test flow. Run top to bottom: signup Ada and Bob (tokens and wallet ids are captured automatically), deposit, transfer, replay, block, reconcile. Set baseUrl and adminKey in the collection variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "https://lendsqr-wallet-service-wg2b.onrender.com" },
+    { "key": "adminKey", "value": "paste ADMIN_API_KEY from Render > Environment (or .env locally)" },
+    { "key": "adaToken", "value": "" },
+    { "key": "adaUserId", "value": "" },
+    { "key": "adaWalletId", "value": "" },
+    { "key": "bobToken", "value": "" },
+    { "key": "bobUserId", "value": "" },
+    { "key": "bobWalletId", "value": "" },
+    { "key": "idempotencyKey", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "// Unique identities per run so signup never hits the 409 duplicate rule.",
+          "if (!pm.collectionVariables.get('runId')) {",
+          "  pm.collectionVariables.set('runId', String(Date.now()).slice(-8));",
+          "}"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "0 Health",
+      "item": [
+        {
+          "name": "GET / (service info)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/" }
+        },
+        {
+          "name": "GET /health (checks the database)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" }
+        }
+      ]
+    },
+    {
+      "name": "1 Accounts",
+      "item": [
+        {
+          "name": "POST /auth/signup  Ada (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('adaToken', b.accessToken);",
+                  "pm.collectionVariables.set('adaUserId', b.user.id);",
+                  "pm.collectionVariables.set('adaWalletId', b.wallet.id);",
+                  "pm.test('201 with wallet at 0', () => { pm.response.to.have.status(201); pm.expect(b.wallet.balance).to.eql(0); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/signup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ada{{runId}}@example.com\",\n  \"phoneNumber\": \"+23480{{runId}}\",\n  \"firstName\": \"Ada\",\n  \"lastName\": \"Obi\",\n  \"password\": \"correct-horse-battery\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/signup  Bob (201)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.collectionVariables.set('bobToken', b.accessToken);",
+                  "pm.collectionVariables.set('bobUserId', b.user.id);",
+                  "pm.collectionVariables.set('bobWalletId', b.wallet.id);",
+                  "pm.test('201', () => pm.response.to.have.status(201));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/signup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"bob{{runId}}@example.com\",\n  \"phoneNumber\": \"+23481{{runId}}\",\n  \"firstName\": \"Bob\",\n  \"lastName\": \"Eze\",\n  \"password\": \"correct-horse-battery\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/signup  blacklisted email (403)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('403', () => pm.response.to.have.status(403));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/signup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"blacklisted@example.com\",\n  \"phoneNumber\": \"+23470{{runId}}\",\n  \"firstName\": \"Bad\",\n  \"lastName\": \"Actor\",\n  \"password\": \"correct-horse-battery\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/signup  duplicate email (409)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('409', () => pm.response.to.have.status(409));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/signup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"ada{{runId}}@example.com\",\n  \"phoneNumber\": \"+23490{{runId}}\",\n  \"firstName\": \"Ada\",\n  \"lastName\": \"Again\",\n  \"password\": \"correct-horse-battery\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/signup  invalid body + unknown field (400)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/signup",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"not-an-email\",\n  \"phoneNumber\": \"0801234\",\n  \"firstName\": \"\",\n  \"password\": \"short\",\n  \"status\": \"active\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /auth/login  Ada (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.collectionVariables.set('adaToken', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"ada{{runId}}@example.com\",\n  \"password\": \"correct-horse-battery\"\n}" }
+          }
+        },
+        {
+          "name": "POST /auth/login  wrong password (401)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('401', () => pm.response.to.have.status(401));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{baseUrl}}/auth/login",
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"ada{{runId}}@example.com\",\n  \"password\": \"wrong-password\"\n}" }
+          }
+        },
+        {
+          "name": "GET /users/me  Ada (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adaToken}}" }],
+            "url": "{{baseUrl}}/users/me"
+          }
+        },
+        {
+          "name": "GET /users/me  no token (401)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('401', () => pm.response.to.have.status(401));"] } }],
+          "request": { "method": "GET", "url": "{{baseUrl}}/users/me" }
+        }
+      ]
+    },
+    {
+      "name": "2 Wallet and deposits",
+      "item": [
+        {
+          "name": "GET /wallets/me  Ada (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adaToken}}" }],
+            "url": "{{baseUrl}}/wallets/me"
+          }
+        },
+        {
+          "name": "POST /wallets/me/deposits  10,000 kobo (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "exec": ["pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"] }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 and balanceAfter 10000', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().balanceAfter).to.eql(10000); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/wallets/me/deposits",
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 10000\n}" }
+          }
+        },
+        {
+          "name": "POST /wallets/me/deposits  replay same key (201, Idempotent-Replayed: true, balance unchanged)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('replayed', () => { pm.response.to.have.status(201); pm.expect(pm.response.headers.get('Idempotent-Replayed')).to.eql('true'); pm.expect(pm.response.json().balanceAfter).to.eql(10000); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/wallets/me/deposits",
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 10000\n}" }
+          }
+        },
+        {
+          "name": "POST /wallets/me/deposits  missing Idempotency-Key (400)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/wallets/me/deposits",
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 500\n}" }
+          }
+        },
+        {
+          "name": "POST /wallets/me/deposits  decimal amount (400)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/wallets/me/deposits",
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 10.5\n}" }
+          }
+        },
+        {
+          "name": "GET /wallets/me/transactions?page=1&limit=20  Ada (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adaToken}}" }],
+            "url": "{{baseUrl}}/wallets/me/transactions?page=1&limit=20"
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 Transfers",
+      "item": [
+        {
+          "name": "POST /transfers  Ada pays Bob 2,500 (201)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": { "exec": ["pm.collectionVariables.set('idempotencyKey', pm.variables.replaceIn('{{$guid}}'));"] }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 and balanceAfter 7500', () => { pm.response.to.have.status(201); pm.expect(pm.response.json().balanceAfter).to.eql(7500); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/transfers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientWalletId\": \"{{bobWalletId}}\",\n  \"amount\": 2500,\n  \"description\": \"Lunch\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /transfers  replay same key (201, Idempotent-Replayed: true, money moves once)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('replayed', () => { pm.response.to.have.status(201); pm.expect(pm.response.headers.get('Idempotent-Replayed')).to.eql('true'); pm.expect(pm.response.json().balanceAfter).to.eql(7500); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/transfers",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipientWalletId\": \"{{bobWalletId}}\",\n  \"amount\": 2500,\n  \"description\": \"Lunch\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /transfers  same key, different amount (422)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('422', () => pm.response.to.have.status(422));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{idempotencyKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/transfers",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientWalletId\": \"{{bobWalletId}}\",\n  \"amount\": 9999\n}" }
+          }
+        },
+        {
+          "name": "POST /transfers  insufficient funds (422)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('422', () => pm.response.to.have.status(422));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/transfers",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientWalletId\": \"{{bobWalletId}}\",\n  \"amount\": 1000000\n}" }
+          }
+        },
+        {
+          "name": "POST /transfers  to own wallet (400)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('400', () => pm.response.to.have.status(400));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/transfers",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientWalletId\": \"{{adaWalletId}}\",\n  \"amount\": 100\n}" }
+          }
+        },
+        {
+          "name": "POST /transfers  unknown recipient (404)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('404', () => pm.response.to.have.status(404));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/transfers",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientWalletId\": \"11111111-1111-4111-8111-111111111111\",\n  \"amount\": 100\n}" }
+          }
+        },
+        {
+          "name": "GET /wallets/me  Bob should show 2,500 (200)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('2500', () => pm.expect(pm.response.json().balance).to.eql(2500));"] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{bobToken}}" }],
+            "url": "{{baseUrl}}/wallets/me"
+          }
+        },
+        {
+          "name": "GET /wallets/me/transactions  Bob sees the credit with counterparty (200)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{bobToken}}" }],
+            "url": "{{baseUrl}}/wallets/me/transactions"
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 Admin",
+      "item": [
+        {
+          "name": "POST /admin/users/:id/block  Bob (200)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('blocked', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('blocked'); });"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-key", "value": "{{adminKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/admin/users/{{bobUserId}}/block",
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Suspected fraud\"\n}" }
+          }
+        },
+        {
+          "name": "POST /transfers  Ada pays blocked Bob (403)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('403', () => pm.response.to.have.status(403));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adaToken}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/transfers",
+            "body": { "mode": "raw", "raw": "{\n  \"recipientWalletId\": \"{{bobWalletId}}\",\n  \"amount\": 100\n}" }
+          }
+        },
+        {
+          "name": "POST /wallets/me/deposits  blocked Bob deposits (403)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('403', () => pm.response.to.have.status(403));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{bobToken}}" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/wallets/me/deposits",
+            "body": { "mode": "raw", "raw": "{\n  \"amount\": 500\n}" }
+          }
+        },
+        {
+          "name": "POST /admin/users/:id/unblock  Bob (200)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('active', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('active'); });"] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }],
+            "url": "{{baseUrl}}/admin/users/{{bobUserId}}/unblock"
+          }
+        },
+        {
+          "name": "POST /admin/users/:id/block  wrong admin key (401)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('401', () => pm.response.to.have.status(401));"] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-key", "value": "not-the-key" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "url": "{{baseUrl}}/admin/users/{{bobUserId}}/block",
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Suspected fraud\"\n}" }
+          }
+        },
+        {
+          "name": "GET /admin/reconciliation  (200, ok: true)",
+          "event": [{ "listen": "test", "script": { "exec": ["pm.test('ledger balances', () => { pm.response.to.have.status(200); pm.expect(pm.response.json().ok).to.eql(true); pm.expect(pm.response.json().sumOfBalances).to.eql(0); });"] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "x-admin-key", "value": "{{adminKey}}" }],
+            "url": "{{baseUrl}}/admin/reconciliation"
+          }
+        }
+      ]
+    }
+  ]
+}
