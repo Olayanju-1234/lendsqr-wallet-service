@@ -27,10 +27,13 @@ export class LedgerService {
     private readonly wallets: WalletsRepository,
   ) {}
 
-  // The caller must already hold FOR UPDATE locks on both wallets, so the balances read from them are current.
+  // The caller holds FOR UPDATE locks on both wallets. Balances are still adjusted relatively in SQL and the
+  // ledger rows record what the database returned, so the arithmetic never depends on a value read earlier.
   async post(trx: Knex.Transaction, posting: Posting): Promise<PostingResult> {
-    const debitBalanceAfter = posting.debit.balance - posting.amount;
-    const creditBalanceAfter = posting.credit.balance + posting.amount;
+    const [debitBalanceAfter, creditBalanceAfter] = await Promise.all([
+      this.wallets.adjustBalance(trx, posting.debit.id, -posting.amount),
+      this.wallets.adjustBalance(trx, posting.credit.id, posting.amount),
+    ]);
 
     const transaction = await this.ledger.insertTransaction(trx, {
       type: posting.type,
@@ -53,13 +56,6 @@ export class LedgerService {
         balance_after: creditBalanceAfter,
       },
     ]);
-    await this.wallets.updateBalance(trx, posting.debit.id, debitBalanceAfter);
-    await this.wallets.updateBalance(
-      trx,
-      posting.credit.id,
-      creditBalanceAfter,
-    );
-
     return { transaction, debitBalanceAfter, creditBalanceAfter };
   }
 }

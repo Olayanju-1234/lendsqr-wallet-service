@@ -126,6 +126,25 @@ describe('Transfers (e2e)', () => {
       expect(await balanceOf(t.db, alice.walletId)).toBe(10_000);
     });
 
+    it('waits for an in-flight block and then refuses the transfer', async () => {
+      // Simulate an admin block that has taken the user's row lock but not yet committed.
+      const blocking = await t.db.transaction();
+      await blocking('users')
+        .where({ id: alice.userId })
+        .update({ status: 'blocked', blocked_reason: 'Fraud report' });
+
+      const pending = transfer(alice, {
+        recipientWalletId: bob.walletId,
+        amount: 100,
+      });
+      // The transfer is now blocked on FOR SHARE. Give it time to get there, then commit the block.
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      await blocking.commit();
+
+      await pending.expect(403);
+      expect(await balanceOf(t.db, alice.walletId)).toBe(10_000);
+    });
+
     it('validates the body and requires an Idempotency-Key', async () => {
       await transfer(alice, { recipientWalletId: 'nope', amount: 100 }).expect(
         400,

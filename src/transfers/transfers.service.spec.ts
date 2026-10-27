@@ -37,7 +37,7 @@ describe('TransfersService', () => {
     findByUserId: vi.fn(),
     lockByIds: vi.fn(),
   };
-  const users = { findById: vi.fn() };
+  const users = { lockForShare: vi.fn() };
   const ledger = { post: vi.fn() };
   const idempotency = {
     hashRequest: vi.fn().mockReturnValue('hash'),
@@ -58,10 +58,10 @@ describe('TransfersService', () => {
       wallet({}),
       wallet({ id: RECIPIENT_WALLET, user_id: 'recipient-id', balance: 0 }),
     ]);
-    users.findById.mockResolvedValue({
-      id: 'recipient-id',
-      status: UserStatus.Active,
-    });
+    users.lockForShare.mockResolvedValue([
+      { id: 'recipient-id', status: UserStatus.Active },
+      { id: 'sender-id', status: UserStatus.Active },
+    ]);
     ledger.post.mockResolvedValue({
       transaction: { id: 'tx-1', created_at: new Date() },
       debitBalanceAfter: 9_000,
@@ -122,15 +122,17 @@ describe('TransfersService', () => {
     expect(ledger.post).not.toHaveBeenCalled();
   });
 
-  it('rejects a blocked sender before opening a transaction', async () => {
-    await expect(
-      service.transfer(
-        { ...sender, status: UserStatus.Blocked },
-        { recipientWalletId: RECIPIENT_WALLET, amount: 1 },
-        'key-12345678',
-      ),
-    ).rejects.toMatchObject({ status: 403 });
-    expect(db.transaction).not.toHaveBeenCalled();
+  it('rejects a sender whose locked row says blocked, even if the token said active', async () => {
+    users.lockForShare.mockResolvedValue([
+      { id: 'recipient-id', status: UserStatus.Active },
+      { id: 'sender-id', status: UserStatus.Blocked },
+    ]);
+    await expect(transfer()).rejects.toMatchObject({ status: 403 });
+    expect(users.lockForShare).toHaveBeenCalledWith(trx, [
+      'sender-id',
+      'recipient-id',
+    ]);
+    expect(ledger.post).not.toHaveBeenCalled();
   });
 
   it('rejects a transfer to the sender’s own wallet', async () => {
@@ -155,10 +157,10 @@ describe('TransfersService', () => {
   });
 
   it('rejects a blocked recipient', async () => {
-    users.findById.mockResolvedValue({
-      id: 'recipient-id',
-      status: UserStatus.Blocked,
-    });
+    users.lockForShare.mockResolvedValue([
+      { id: 'recipient-id', status: UserStatus.Blocked },
+      { id: 'sender-id', status: UserStatus.Active },
+    ]);
     await expect(transfer()).rejects.toMatchObject({ status: 403 });
     expect(ledger.post).not.toHaveBeenCalled();
   });

@@ -160,12 +160,15 @@ A transfer runs in one database transaction:
 
 1. claim the idempotency key;
 2. `SELECT … FOR UPDATE` both wallets, **ordered by id**;
-3. check the sender's balance on the locked row;
-4. write the transaction and both ledger entries, update both balances;
-5. store the response against the key;
-6. commit.
+3. `SELECT … FOR SHARE` both users and check neither is blocked;
+4. check the sender's balance on the locked row;
+5. `UPDATE wallets SET balance = balance ± amount … RETURNING balance` for each side, then write the transaction and both ledger entries with the returned balances;
+6. store the response against the key;
+7. commit.
 
-`FOR UPDATE` makes concurrent transfers that touch the same wallet queue up, so a balance check can never be based on a stale read. Locking in id order means a transfer from A to B and one from B to A acquire the same locks in the same order, so Postgres never has to abort one for deadlock. The database adds a last line of defence: `CHECK (balance >= 0)` on user wallets, so even a bug in this code could not overdraw a wallet.
+`FOR UPDATE` makes concurrent transfers that touch the same wallet queue up, so a balance check can never be based on a stale read. Locking in id order means a transfer from A to B and one from B to A acquire the same locks in the same order, so Postgres never has to abort one for deadlock. Balances are adjusted *relatively in SQL*, never read into the application, modified and written back, so the arithmetic cannot lose an update even if a future change dropped the lock. The database adds a last line of defence: `CHECK (balance >= 0)` on user wallets, so even a bug in this code could not overdraw a wallet.
+
+User status is also read inside the transaction under a share lock rather than taken from the token or the request guard. An admin block is an `UPDATE` on that row, so it waits for an in-flight transfer to commit, and a transfer that starts after the block sees it. The e2e suite holds an uncommitted block, fires a transfer, commits the block and asserts the transfer is refused.
 
 The e2e suite fires 50 parallel transfers of ₦300 from a wallet holding ₦10,000 and asserts exactly 33 succeed, 17 fail with 422, and the final balances are ₦100 and ₦9,900. A second test runs 40 interleaved A→B and B→A transfers and asserts all succeed.
 

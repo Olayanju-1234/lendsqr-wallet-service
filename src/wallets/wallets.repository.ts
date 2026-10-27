@@ -33,13 +33,20 @@ export class WalletsRepository {
       .forUpdate();
   }
 
-  async updateBalance(
+  // Relative update done by the database, never "read balance, add in JS, write back". The CHECK
+  // constraint on the table rejects any update that would take a user wallet below zero.
+  async adjustBalance(
     trx: Knex.Transaction,
     id: string,
-    balance: number,
-  ): Promise<void> {
-    await trx<WalletRow>('wallets')
+    delta: number,
+  ): Promise<number> {
+    const [row] = await trx<WalletRow>('wallets')
       .where({ id })
-      .update({ balance, updated_at: trx.fn.now() });
+      .update({
+        balance: trx.raw('balance + ?', [delta]),
+        updated_at: trx.fn.now(),
+      })
+      .returning('balance');
+    return row.balance;
   }
 }

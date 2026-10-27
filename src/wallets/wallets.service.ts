@@ -13,6 +13,7 @@ import {
   type IdempotentResult,
 } from '../idempotency/idempotency.service.js';
 import { UserStatus } from '../users/user.types.js';
+import { UsersRepository } from '../users/users.repository.js';
 import { DepositDto } from './dto/deposit.dto.js';
 import { PaginationQueryDto } from './dto/pagination-query.dto.js';
 import { LedgerRepository } from './ledger.repository.js';
@@ -51,6 +52,7 @@ export class WalletsService {
   constructor(
     @Inject(KNEX) private readonly db: Knex,
     private readonly wallets: WalletsRepository,
+    private readonly users: UsersRepository,
     private readonly ledgerRepository: LedgerRepository,
     private readonly ledger: LedgerService,
     private readonly idempotency: IdempotencyService,
@@ -82,9 +84,6 @@ export class WalletsService {
     dto: DepositDto,
     idempotencyKey: string,
   ): Promise<IdempotentResult<DepositResponse>> {
-    if (user.status === UserStatus.Blocked) {
-      throw new ForbiddenException('Your account is blocked');
-    }
     const requestHash = this.idempotency.hashRequest(['deposit', dto.amount]);
 
     return this.db.transaction(async (trx) => {
@@ -98,6 +97,10 @@ export class WalletsService {
         return { replayed: true, body: stored };
       }
 
+      const [owner] = await this.users.lockForShare(trx, [user.id]);
+      if (owner?.status !== UserStatus.Active) {
+        throw new ForbiddenException('Your account is blocked');
+      }
       const wallet = await this.findWalletOrFail(user.id, trx);
       const locked = await this.wallets.lockByIds(trx, [
         FUNDING_WALLET_ID,

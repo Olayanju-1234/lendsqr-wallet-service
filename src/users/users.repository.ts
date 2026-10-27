@@ -20,8 +20,10 @@ export class UsersRepository {
     return this.db<UserRow>('users').where({ email }).first();
   }
 
-  findByIds(trx: Knex.Transaction, ids: string[]): Promise<UserRow[]> {
-    return trx<UserRow>('users').whereIn('id', ids);
+  // SELECT ... FOR SHARE: a concurrent block (an UPDATE on the row) waits until this transaction commits,
+  // and a block that already committed is the version we read. So status cannot change under a transfer.
+  lockForShare(trx: Knex.Transaction, ids: string[]): Promise<UserRow[]> {
+    return trx<UserRow>('users').whereIn('id', ids).orderBy('id').forShare();
   }
 
   async updateStatus(

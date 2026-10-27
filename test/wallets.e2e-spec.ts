@@ -71,6 +71,13 @@ describe('Wallet deposits and history (e2e)', () => {
     await deposit(user.token, crypto.randomUUID(), 10_000).expect(403);
   });
 
+  it('is refused by the database itself when a user balance would go negative', async () => {
+    const user = await signupUser(t.url);
+    await expect(
+      t.db('wallets').where({ id: user.walletId }).update({ balance: -1 }),
+    ).rejects.toMatchObject({ code: '23514' });
+  });
+
   it('lists ledger entries newest first with pagination', async () => {
     const user = await signupUser(t.url);
     await deposit(user.token, crypto.randomUUID(), 1_000).expect(201);

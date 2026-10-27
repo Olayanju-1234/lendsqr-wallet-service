@@ -40,9 +40,6 @@ export class TransfersService {
     dto: CreateTransferDto,
     idempotencyKey: string,
   ): Promise<IdempotentResult<TransferResponse>> {
-    if (sender.status === UserStatus.Blocked) {
-      throw new ForbiddenException('Your account is blocked');
-    }
     const description = dto.description || null;
     const requestHash = this.idempotency.hashRequest([
       'transfer',
@@ -85,8 +82,19 @@ export class TransfersService {
         throw new UnprocessableEntityException('Wallet currencies differ');
       }
 
-      const recipient = await this.users.findById(target.user_id ?? '', trx);
-      if (!recipient || recipient.status === UserStatus.Blocked) {
+      // Status is read under a share lock inside the transaction, not from the token or the auth guard,
+      // so a block that lands while this transfer is in flight either waits for it or is seen by it.
+      const parties = await this.users.lockForShare(trx, [
+        sender.id,
+        target.user_id ?? '',
+      ]);
+      if (
+        parties.find((u) => u.id === sender.id)?.status !== UserStatus.Active
+      ) {
+        throw new ForbiddenException('Your account is blocked');
+      }
+      const recipient = parties.find((u) => u.id === target.user_id);
+      if (!recipient || recipient.status !== UserStatus.Active) {
         throw new ForbiddenException('The recipient cannot receive transfers');
       }
 
