@@ -120,6 +120,45 @@ describe('Accounts and user management (e2e)', () => {
       });
     });
 
+    it('re-checks an existing user against the blacklist', async () => {
+      const clean = await signupUser(t.url);
+      const res = await request(t.url)
+        .get(`/admin/users/${clean.userId}/blacklist-check`)
+        .set('x-admin-key', ADMIN_KEY)
+        .expect(200);
+      expect(res.body).toMatchObject({
+        userId: clean.userId,
+        status: 'active',
+        blacklisted: false,
+      });
+      expect(res.body.identities).toHaveLength(2);
+
+      // A user reported after onboarding: insert directly, since signup would refuse this phone number.
+      const [reported] = await t
+        .db('users')
+        .insert({
+          email: 'late@example.com',
+          phone_number: '+2348000000000',
+          first_name: 'Late',
+          last_name: 'Report',
+          password_hash: 'x',
+        })
+        .returning('id');
+      const flagged = await request(t.url)
+        .get(`/admin/users/${reported.id}/blacklist-check`)
+        .set('x-admin-key', ADMIN_KEY)
+        .expect(200);
+      expect(flagged.body.blacklisted).toBe(true);
+      expect(flagged.body.identities).toEqual([
+        { identity: 'late@example.com', blacklisted: false },
+        { identity: '+2348000000000', blacklisted: true },
+      ]);
+
+      await request(t.url)
+        .get(`/admin/users/${reported.id}/blacklist-check`)
+        .expect(401);
+    });
+
     it('returns 404 for an unknown user and 400 for a malformed id', async () => {
       await request(t.url)
         .post(`/admin/users/${crypto.randomUUID()}/unblock`)

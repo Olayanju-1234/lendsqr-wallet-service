@@ -4,6 +4,11 @@ import {
   type BlacklistProvider,
 } from './blacklist.provider.js';
 
+export interface IdentityCheck {
+  identity: string;
+  blacklisted: boolean;
+}
+
 @Injectable()
 export class BlacklistService {
   private readonly logger = new Logger(BlacklistService.name);
@@ -12,11 +17,18 @@ export class BlacklistService {
     @Inject(BLACKLIST_PROVIDER) private readonly provider: BlacklistProvider,
   ) {}
 
-  async assertCanOnboard(identities: string[]): Promise<void> {
-    const results = await Promise.all(
-      identities.map((identity) => this.provider.isBlacklisted(identity)),
+  async check(identities: string[]): Promise<IdentityCheck[]> {
+    return Promise.all(
+      identities.map(async (identity) => ({
+        identity,
+        blacklisted: await this.provider.isBlacklisted(identity),
+      })),
     );
-    if (results.some(Boolean)) {
+  }
+
+  async assertCanOnboard(identities: string[]): Promise<void> {
+    const results = await this.check(identities);
+    if (results.some((result) => result.blacklisted)) {
       this.logger.warn('Signup rejected: identity is on the blacklist');
       throw new ForbiddenException(
         'This user cannot be onboarded because an identity is blacklisted.',

@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -11,12 +12,19 @@ import {
 import { AdminKeyGuard } from '../common/guards/admin-key.guard.js';
 import { BlockUserDto } from './dto/block-user.dto.js';
 import type { UserResponse } from './user.types.js';
-import { UsersService } from './users.service.js';
+import { BlacklistCheckResponse, UsersService } from './users.service.js';
 
 @Controller('admin/users')
 @UseGuards(AdminKeyGuard)
 export class AdminUsersController {
   constructor(private readonly users: UsersService) {}
+
+  @Get(':id/blacklist-check')
+  blacklistCheck(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<BlacklistCheckResponse> {
+    return this.users.blacklistCheck(id);
+  }
 
   @Post(':id/block')
   @HttpCode(HttpStatus.OK)

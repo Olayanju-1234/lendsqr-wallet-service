@@ -122,11 +122,12 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 
 ### Admin
 
-| Method and path                 | Auth          | What it does                                                                                              |
-| ------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------- |
-| `POST /admin/users/:id/block`   | `x-admin-key` | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit.                      |
-| `POST /admin/users/:id/unblock` | `x-admin-key` | Restores the user.                                                                                        |
-| `GET /admin/reconciliation`     | `x-admin-key` | Checks the ledger invariants and reports anything out of balance (see [Reconciliation](#reconciliation)). |
+| Method and path                        | Auth          | What it does                                                                                                                                                              |
+| -------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /admin/users/:id/blacklist-check` | `x-admin-key` | Re-runs the blacklist check on an existing user's email and phone and reports the result, for someone reported after onboarding. Blocking stays an explicit admin action. |
+| \1                                     | `x-admin-key` | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit.                                                                                      |
+| `POST /admin/users/:id/unblock`        | `x-admin-key` | Restores the user.                                                                                                                                                        |
+| `GET /admin/reconciliation`            | `x-admin-key` | Checks the ledger invariants and reports anything out of balance (see [Reconciliation](#reconciliation)).                                                                 |
 
 ### Quick walkthrough with curl
 
