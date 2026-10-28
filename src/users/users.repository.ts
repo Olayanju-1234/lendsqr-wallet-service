@@ -20,6 +20,14 @@ export class UsersRepository {
     return this.db<UserRow>('users').where({ email }).first();
   }
 
+  async existsByEmailOrPhone(email: string, phone: string): Promise<boolean> {
+    const row = await this.db<UserRow>('users')
+      .where({ email })
+      .orWhere({ phone_number: phone })
+      .first('id');
+    return row !== undefined;
+  }
+
   // FOR SHARE: an admin block (UPDATE) waits for us, and one that already committed is what we read.
   lockForShare(trx: Knex.Transaction, ids: string[]): Promise<UserRow[]> {
     return trx<UserRow>('users').whereIn('id', ids).orderBy('id').forShare();

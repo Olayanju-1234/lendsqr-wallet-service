@@ -17,17 +17,20 @@ export class WalletsRepository {
     return row;
   }
 
-  findByUserId(
-    userId: string,
-    db: Knex = this.db,
-  ): Promise<WalletRow | undefined> {
-    return db<WalletRow>('wallets').where({ user_id: userId }).first();
+  findByUserId(userId: string): Promise<WalletRow | undefined> {
+    return this.db<WalletRow>('wallets').where({ user_id: userId }).first();
   }
 
-  // Locked in id order so A->B and B->A never deadlock.
-  lockByIds(trx: Knex.Transaction, ids: string[]): Promise<WalletRow[]> {
+  // One round trip locks the caller's wallet (by owner) and the other wallet (by id), in id order so
+  // A->B and B->A never deadlock. A self-transfer comes back as a single row.
+  lockPair(
+    trx: Knex.Transaction,
+    ownerId: string,
+    walletId: string,
+  ): Promise<WalletRow[]> {
     return trx<WalletRow>('wallets')
-      .whereIn('id', ids)
+      .where({ user_id: ownerId })
+      .orWhere({ id: walletId })
       .orderBy('id')
       .forUpdate();
   }

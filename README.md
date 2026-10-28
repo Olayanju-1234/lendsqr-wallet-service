@@ -200,9 +200,9 @@ The e2e suite runs it after a burst of concurrent transfers and also corrupts a 
 A transfer runs in one database transaction:
 
 1. claim the idempotency key;
-2. `SELECT … FOR UPDATE` both wallets, **ordered by id**;
-3. `SELECT … FOR SHARE` both users and check neither is blocked;
-4. check the sender's balance on the locked row;
+2. `SELECT … FOR UPDATE` both wallets in one query, **ordered by id**;
+3. check the recipient exists, the currencies match, and the sender's balance on the locked row covers the amount (all from rows already in memory, so a bad transfer fails before the next round trip);
+4. `SELECT … FOR SHARE` both users and check neither is blocked;
 5. `UPDATE wallets SET balance = balance ± amount … RETURNING balance` for each side, then write the transaction and both ledger entries with the returned balances;
 6. store the response against the key;
 7. commit.
@@ -222,6 +222,10 @@ Money-moving endpoints require an `Idempotency-Key` header, scoped per user. The
 - **Concurrent duplicate:** the second insert blocks on the unique index until the first transaction commits, then reads the stored response. There is no "in progress" status to return: by the time the second request can read the key, the first has either committed with its response or rolled back. Ten simultaneous requests with the same key produce one transfer; the test covers it.
 - **Same key, different body:** a hash of the request is stored with the key; a mismatch returns 422 rather than silently returning an unrelated response.
 - **Failed attempt:** the transaction rolls back, which also removes the key, so the client can retry the same key after fixing the cause (for example, after funding the wallet).
+
+### Order of checks
+
+Cheap and local before expensive and remote, and nothing is checked twice for the same reason. Signup validates the body, then does one indexed read for a duplicate email or phone, then the two Karma lookups, then the bcrypt hash, then the insert (whose unique index still decides when two signups race). A transfer validates, fails fast on the guard's view of the sender's status, claims the idempotency key, locks both wallets in one query, rejects a missing recipient or insufficient funds from the rows it already holds, and only then takes the share locks on the two users. The one place work is done on purpose when it could be skipped is login: an unknown email is compared against a dummy bcrypt hash so the response time does not reveal which emails are registered.
 
 ### Blacklist check
 

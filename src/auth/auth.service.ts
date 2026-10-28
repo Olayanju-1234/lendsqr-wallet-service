@@ -27,11 +27,18 @@ import { LoginDto } from './dto/login.dto.js';
 import { SignupDto } from './dto/signup.dto.js';
 
 const BCRYPT_ROUNDS = 10;
+const DUPLICATE_MESSAGE =
+  'An account with this email or phone number already exists';
 
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
   private readonly expiresIn: number;
+  // Compared against when the email is unknown, so login takes the same time either way.
+  private readonly dummyHash = bcrypt.hashSync(
+    'not-a-real-password',
+    BCRYPT_ROUNDS,
+  );
 
   constructor(
     @Inject(KNEX) private readonly db: Knex,
@@ -48,6 +55,11 @@ export class AuthService {
     // bcrypt hashes at most 72 bytes; MaxLength counts characters, so multi-byte passwords need this check.
     if (bcrypt.truncates(dto.password)) {
       throw new BadRequestException('password must be at most 72 bytes');
+    }
+    // Cheapest check first: one indexed read before two Karma calls and a bcrypt hash.
+    // The unique index on insert still decides when two signups race.
+    if (await this.users.existsByEmailOrPhone(dto.email, dto.phoneNumber)) {
+      throw new ConflictException(DUPLICATE_MESSAGE);
     }
     await this.blacklist.assertCanOnboard([dto.email, dto.phoneNumber]);
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
@@ -73,9 +85,7 @@ export class AuthService {
       };
     } catch (error) {
       if (isUniqueViolation(error)) {
-        throw new ConflictException(
-          'An account with this email or phone number already exists',
-        );
+        throw new ConflictException(DUPLICATE_MESSAGE);
       }
       throw error;
     }
@@ -83,10 +93,11 @@ export class AuthService {
 
   async login(dto: LoginDto): Promise<TokenResponse> {
     const user = await this.users.findByEmail(dto.email);
-    const valid =
-      user !== undefined &&
-      (await bcrypt.compare(dto.password, user.password_hash));
-    if (!valid) {
+    const matches = await bcrypt.compare(
+      dto.password,
+      user?.password_hash ?? this.dummyHash,
+    );
+    if (!user || !matches) {
       throw new UnauthorizedException('Invalid email or password');
     }
     return this.issueToken(user);

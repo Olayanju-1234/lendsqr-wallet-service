@@ -67,10 +67,9 @@ export class WalletsService {
     userId: string,
     { cursor, limit }: LedgerQueryDto,
   ): Promise<LedgerPage> {
-    const wallet = await this.findWalletOrFail(userId);
-    // Fetch one extra row to know whether a next page exists without a COUNT(*).
-    const entries = await this.ledgerRepository.listByWallet(
-      wallet.id,
+    // One query (the wallet is a subselect); one extra row says whether a next page exists, no COUNT(*).
+    const entries = await this.ledgerRepository.listByUser(
+      userId,
       limit + 1,
       cursor,
     );
@@ -103,20 +102,23 @@ export class WalletsService {
         return { replayed: true, body: stored };
       }
 
-      const wallet = await this.findWalletOrFail(user.id, trx);
-      // Same lock order as transfers.
-      const locked = await this.wallets.lockByIds(trx, [
+      // Same lock order as transfers, in one round trip.
+      const locked = await this.wallets.lockPair(
+        trx,
+        user.id,
         FUNDING_WALLET_ID,
-        wallet.id,
-      ]);
+      );
+      const funding = locked.find((row) => row.id === FUNDING_WALLET_ID);
+      const target = locked.find((row) => row.user_id === user.id);
+      if (!funding) {
+        throw new Error('Funding wallet is missing; run the migrations');
+      }
+      if (!target) {
+        throw new NotFoundException('Wallet not found');
+      }
       const [owner] = await this.users.lockForShare(trx, [user.id]);
       if (owner?.status !== UserStatus.Active) {
         throw new ForbiddenException('Your account is blocked');
-      }
-      const funding = locked.find((row) => row.id === FUNDING_WALLET_ID);
-      const target = locked.find((row) => row.id === wallet.id);
-      if (!funding || !target) {
-        throw new Error('Funding wallet is missing; run the migrations');
       }
 
       const { transaction, creditBalanceAfter } = await this.ledger.post(trx, {
@@ -130,25 +132,22 @@ export class WalletsService {
 
       const body: DepositResponse = {
         transactionId: transaction.id,
-        walletId: wallet.id,
+        walletId: target.id,
         amount: dto.amount,
-        currency: wallet.currency,
+        currency: target.currency,
         balanceAfter: creditBalanceAfter,
         createdAt: transaction.created_at,
       };
       await this.idempotency.complete(trx, user.id, idempotencyKey, body);
       this.logger.log(
-        `Deposit ${transaction.id}: ${dto.amount} kobo into wallet ${wallet.id}`,
+        `Deposit ${transaction.id}: ${dto.amount} kobo into wallet ${target.id}`,
       );
       return { replayed: false, body };
     });
   }
 
-  private async findWalletOrFail(
-    userId: string,
-    db: Knex = this.db,
-  ): Promise<WalletRow> {
-    const wallet = await this.wallets.findByUserId(userId, db);
+  private async findWalletOrFail(userId: string): Promise<WalletRow> {
+    const wallet = await this.wallets.findByUserId(userId);
     if (!wallet) {
       throw new NotFoundException('Wallet not found');
     }

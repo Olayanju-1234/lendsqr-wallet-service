@@ -64,30 +64,30 @@ export class TransfersService {
         return { replayed: true, body: stored };
       }
 
-      const senderWallet = await this.wallets.findByUserId(sender.id, trx);
-      if (!senderWallet) {
+      const locked = await this.wallets.lockPair(
+        trx,
+        sender.id,
+        dto.recipientWalletId,
+      );
+      const source = locked.find((w) => w.user_id === sender.id);
+      if (!source) {
         throw new NotFoundException('Wallet not found');
       }
-      if (senderWallet.id === dto.recipientWalletId) {
+      if (source.id === dto.recipientWalletId) {
         throw new BadRequestException('You cannot transfer to your own wallet');
       }
-
-      const locked = await this.wallets.lockByIds(trx, [
-        senderWallet.id,
-        dto.recipientWalletId,
-      ]);
-      const source = locked.find((w) => w.id === senderWallet.id);
       const target = locked.find((w) => w.id === dto.recipientWalletId);
-      if (!source || !target || target.type !== WalletType.User) {
+      if (!target || target.type !== WalletType.User || !target.user_id) {
         throw new NotFoundException('Recipient wallet not found');
       }
       if (source.currency !== target.currency) {
         throw new UnprocessableEntityException('Wallet currencies differ');
       }
-
-      if (!target.user_id) {
-        throw new Error(`wallet ${target.id} has no owner`);
+      // Already in memory from the locked row, so it is checked before the next round trip.
+      if (source.balance < dto.amount) {
+        throw new UnprocessableEntityException('Insufficient funds');
       }
+
       // Status read under lock inside the transaction, not from the guard: a concurrent block waits or is seen.
       const parties = await this.users.lockForShare(trx, [
         sender.id,
@@ -101,10 +101,6 @@ export class TransfersService {
       const recipient = parties.find((u) => u.id === target.user_id);
       if (!recipient || recipient.status !== UserStatus.Active) {
         throw new ForbiddenException('The recipient cannot receive transfers');
-      }
-
-      if (source.balance < dto.amount) {
-        throw new UnprocessableEntityException('Insufficient funds');
       }
 
       const { transaction, debitBalanceAfter } = await this.ledger.post(trx, {

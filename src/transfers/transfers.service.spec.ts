@@ -33,10 +33,7 @@ const sender: AuthenticatedUser = {
 
 describe('TransfersService', () => {
   let service: TransfersService;
-  const wallets = {
-    findByUserId: vi.fn(),
-    lockByIds: vi.fn(),
-  };
+  const wallets = { lockPair: vi.fn() };
   const users = { lockForShare: vi.fn() };
   const ledger = { post: vi.fn() };
   const idempotency = {
@@ -53,8 +50,7 @@ describe('TransfersService', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     idempotency.claim.mockResolvedValue(null);
-    wallets.findByUserId.mockResolvedValue(wallet({}));
-    wallets.lockByIds.mockResolvedValue([
+    wallets.lockPair.mockResolvedValue([
       wallet({}),
       wallet({ id: RECIPIENT_WALLET, user_id: 'recipient-id', balance: 0 }),
     ]);
@@ -99,10 +95,11 @@ describe('TransfersService', () => {
       amount: 1_000,
       balanceAfter: 9_000,
     });
-    expect(wallets.lockByIds).toHaveBeenCalledWith(trx, [
-      SENDER_WALLET,
+    expect(wallets.lockPair).toHaveBeenCalledWith(
+      trx,
+      'sender-id',
       RECIPIENT_WALLET,
-    ]);
+    );
     expect(idempotency.complete).toHaveBeenCalledWith(
       trx,
       'sender-id',
@@ -118,7 +115,7 @@ describe('TransfersService', () => {
     const result = await transfer();
 
     expect(result).toEqual({ replayed: true, body: stored });
-    expect(wallets.lockByIds).not.toHaveBeenCalled();
+    expect(wallets.lockPair).not.toHaveBeenCalled();
     expect(ledger.post).not.toHaveBeenCalled();
   });
 
@@ -147,6 +144,8 @@ describe('TransfersService', () => {
   });
 
   it("rejects a transfer to the sender's own wallet", async () => {
+    // The pair query returns a single row when both sides are the same wallet.
+    wallets.lockPair.mockResolvedValue([wallet({})]);
     await expect(
       service.transfer(
         sender,
@@ -157,10 +156,13 @@ describe('TransfersService', () => {
   });
 
   it('returns 404 when the recipient wallet is missing or not a user wallet', async () => {
-    wallets.lockByIds.mockResolvedValue([wallet({})]);
+    wallets.lockPair.mockResolvedValue([
+      wallet({}),
+      wallet({ id: RECIPIENT_WALLET, user_id: null, type: WalletType.User }),
+    ]);
     await expect(transfer()).rejects.toMatchObject({ status: 404 });
 
-    wallets.lockByIds.mockResolvedValue([
+    wallets.lockPair.mockResolvedValue([
       wallet({}),
       wallet({ id: RECIPIENT_WALLET, user_id: null, type: WalletType.Funding }),
     ]);
@@ -176,15 +178,14 @@ describe('TransfersService', () => {
     expect(ledger.post).not.toHaveBeenCalled();
   });
 
-  it('checks the balance on the locked row, not the first read', async () => {
-    // The first read shows 10,000 but by the time the lock is taken another transfer has spent it.
-    wallets.findByUserId.mockResolvedValue(wallet({ balance: 10_000 }));
-    wallets.lockByIds.mockResolvedValue([
+  it('rejects insufficient funds from the locked row before touching users', async () => {
+    wallets.lockPair.mockResolvedValue([
       wallet({ balance: 500 }),
       wallet({ id: RECIPIENT_WALLET, user_id: 'recipient-id', balance: 0 }),
     ]);
 
     await expect(transfer(1_000)).rejects.toMatchObject({ status: 422 });
+    expect(users.lockForShare).not.toHaveBeenCalled();
     expect(ledger.post).not.toHaveBeenCalled();
     expect(idempotency.complete).not.toHaveBeenCalled();
   });

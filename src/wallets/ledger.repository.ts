@@ -31,8 +31,8 @@ export class LedgerRepository {
   }
 
   // Newest first, keyset on id: WHERE id < cursor uses the (wallet_id, id) index, unlike OFFSET.
-  listByWallet(
-    walletId: string,
+  listByUser(
+    userId: string,
     limit: number,
     cursor?: number,
   ): Promise<LedgerEntryWithTransaction[]> {
@@ -45,7 +45,10 @@ export class LedgerRepository {
           'e.wallet_id',
         );
       })
-      .where('e.wallet_id', walletId)
+      .whereIn(
+        'e.wallet_id',
+        this.db('wallets').select('id').where({ user_id: userId }),
+      )
       .orderBy('e.id', 'desc')
       .limit(limit)
       .select<LedgerEntryWithTransaction[]>(
