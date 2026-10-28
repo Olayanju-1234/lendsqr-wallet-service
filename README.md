@@ -70,7 +70,7 @@ All amounts are integers in **kobo** (₦1 = 100 kobo). Requests and responses a
 | ------------------- | ------ | ---------------------------------------------------------------------------------------------------------------- |
 | `POST /auth/signup` | none   | Creates a user and their NGN wallet after the blacklist check. Returns the user, the wallet and an access token. |
 | `POST /auth/login`  | none   | Returns an access token.                                                                                         |
-| `GET /users/me`     | Bearer | The caller's profile and status.                                                                                 |
+| `GET /users/me`     | Bearer | The caller's profile and status. The admin's block reason is not included.                                       |
 
 Signup body:
 
@@ -88,11 +88,11 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 
 ### Wallets
 
-| Method and path                                     | Auth                       | What it does                                                                                                                                                        |
-| --------------------------------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /wallets/me`                                   | Bearer                     | Balance and currency.                                                                                                                                               |
-| `GET /wallets/me/transactions?limit=20&cursor=<id>` | Bearer                     | Ledger entries, newest first, with `direction`, `balanceAfter` and the counterparty wallet. Keyset pagination: pass the returned `nextCursor` to get the next page. |
-| `POST /wallets/me/deposits`                         | Bearer + `Idempotency-Key` | Credits the wallet. Body: `{ "amount": 50000 }`. Stands in for a verified payment webhook.                                                                          |
+| Method and path                                     | Auth                       | What it does                                                                                                                                                                              |
+| --------------------------------------------------- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /wallets/me`                                   | Bearer                     | Balance and currency.                                                                                                                                                                     |
+| `GET /wallets/me/transactions?limit=20&cursor=<id>` | Bearer                     | Ledger entries, newest first, with `direction`, `balanceAfter` and the counterparty wallet (`null` for deposits). Keyset pagination: pass the returned `nextCursor` to get the next page. |
+| `POST /wallets/me/deposits`                         | Bearer + `Idempotency-Key` | Credits the wallet. Body: `{ "amount": 50000 }`. Stands in for a verified payment webhook.                                                                                                |
 
 ### Transfers
 
@@ -250,6 +250,7 @@ One Adjutor detail matters: an app that is still in **test mode** answers every 
 
 - **Deposits are self-service.** A real wallet is funded by a payment provider webhook with signature verification and reconciliation. The deposit endpoint exists so transfers can be demonstrated; it already goes through the same ledger and idempotency path a webhook handler would use.
 - **Single currency.** Wallets carry a `currency` column and transfers refuse to cross currencies, but there is no FX.
+- **A sender is told when the recipient is blocked (403), not shown a 404.** Anyone holding a wallet id can therefore learn whether its owner is blocked. Wallet ids are v4 UUIDs the owner chose to share, and a sender whose transfer fails deserves the real reason, so this is a deliberate trade-off.
 - **Admin auth is a shared key.** Enough for the assessment; in production this would be a role on an authenticated staff user with an audit log of who blocked whom.
 - **Idempotency keys never expire.** Stripe keeps them for 24 hours; a scheduled cleanup would be the next step.
 - **Migrations run at start-up** because Render's free plan has no pre-deploy hook. Knex's migration lock makes that safe with one instance; with several instances I would move it to a release step.

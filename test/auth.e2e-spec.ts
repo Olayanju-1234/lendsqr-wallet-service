@@ -111,6 +111,14 @@ describe('Accounts and user management (e2e)', () => {
         blockedReason: 'Fraud report',
       });
 
+      // The user sees that they are blocked, not the admin's note about them.
+      const me = await request(t.url)
+        .get('/users/me')
+        .set('Authorization', `Bearer ${user.token}`)
+        .expect(200);
+      expect(me.body.status).toBe('blocked');
+      expect(me.body).not.toHaveProperty('blockedReason');
+
       const unblocked = await request(t.url)
         .post(`/admin/users/${user.userId}/unblock`)
         .set('x-admin-key', ADMIN_KEY)

@@ -95,6 +95,7 @@ describe('Wallet deposits and history (e2e)', () => {
       type: 'deposit',
       direction: 'credit',
       balanceAfter: 6_000,
+      counterpartyWalletId: null,
     });
     expect(first.body.nextCursor).toBe(first.body.data[1].id);
 

@@ -11,7 +11,7 @@ import {
 } from '@nestjs/common';
 import { AdminKeyGuard } from '../common/guards/admin-key.guard.js';
 import { BlockUserDto } from './dto/block-user.dto.js';
-import type { UserResponse } from './user.types.js';
+import type { AdminUserResponse } from './user.types.js';
 import { type BlacklistCheckResponse, UsersService } from './users.service.js';
 
 @Controller('admin/users')
@@ -31,13 +31,13 @@ export class AdminUsersController {
   block(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: BlockUserDto,
-  ): Promise<UserResponse> {
+  ): Promise<AdminUserResponse> {
     return this.users.block(id, dto.reason);
   }
 
   @Post(':id/unblock')
   @HttpCode(HttpStatus.OK)
-  unblock(@Param('id', ParseUUIDPipe) id: string): Promise<UserResponse> {
+  unblock(@Param('id', ParseUUIDPipe) id: string): Promise<AdminUserResponse> {
     return this.users.unblock(id);
   }
 }

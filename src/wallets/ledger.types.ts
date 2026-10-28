@@ -1,3 +1,5 @@
+import { FUNDING_WALLET_ID } from './wallet.types.js';
+
 export enum TransactionType {
   Deposit = 'deposit',
   Transfer = 'transfer',
@@ -60,7 +62,11 @@ export function toLedgerEntryResponse(
     direction: entry.amount < 0 ? 'debit' : 'credit',
     amount: Math.abs(entry.amount),
     balanceAfter: entry.balance_after,
-    counterpartyWalletId: entry.counterparty_wallet_id,
+    // The funding wallet is internal: a deposit has no counterparty a user can act on.
+    counterpartyWalletId:
+      entry.counterparty_wallet_id === FUNDING_WALLET_ID
+        ? null
+        : entry.counterparty_wallet_id,
     description: entry.description,
     createdAt: entry.created_at,
   };

@@ -29,8 +29,13 @@ export interface UserResponse {
   firstName: string;
   lastName: string;
   status: UserStatus;
-  blockedReason: string | null;
   createdAt: Date;
+}
+
+// The reason is an admin's note about the user, so only admin responses carry it.
+export interface AdminUserResponse extends UserResponse {
+  blockedReason: string | null;
+  blockedAt: Date | null;
 }
 
 export function toUserResponse(user: UserRow): UserResponse {
@@ -41,7 +46,14 @@ export function toUserResponse(user: UserRow): UserResponse {
     firstName: user.first_name,
     lastName: user.last_name,
     status: user.status,
-    blockedReason: user.blocked_reason,
     createdAt: user.created_at,
+  };
+}
+
+export function toAdminUserResponse(user: UserRow): AdminUserResponse {
+  return {
+    ...toUserResponse(user),
+    blockedReason: user.blocked_reason,
+    blockedAt: user.blocked_at,
   };
 }

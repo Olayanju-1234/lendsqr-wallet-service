@@ -3,7 +3,13 @@ import {
   BlacklistService,
   type IdentityCheck,
 } from '../blacklist/blacklist.service.js';
-import { toUserResponse, type UserResponse, UserStatus } from './user.types.js';
+import {
+  type AdminUserResponse,
+  toAdminUserResponse,
+  toUserResponse,
+  type UserResponse,
+  UserStatus,
+} from './user.types.js';
 import { UsersRepository } from './users.repository.js';
 
 export interface BlacklistCheckResponse {
@@ -48,21 +54,21 @@ export class UsersService {
     return { userId: user.id, status: user.status, blacklisted, identities };
   }
 
-  async block(id: string, reason: string): Promise<UserResponse> {
+  async block(id: string, reason: string): Promise<AdminUserResponse> {
     const user = await this.users.updateStatus(id, UserStatus.Blocked, reason);
     if (!user) {
       throw new NotFoundException('User not found');
     }
     this.logger.log(`User ${id} blocked: ${reason}`);
-    return toUserResponse(user);
+    return toAdminUserResponse(user);
   }
 
-  async unblock(id: string): Promise<UserResponse> {
+  async unblock(id: string): Promise<AdminUserResponse> {
     const user = await this.users.updateStatus(id, UserStatus.Active, null);
     if (!user) {
       throw new NotFoundException('User not found');
     }
     this.logger.log(`User ${id} unblocked`);
-    return toUserResponse(user);
+    return toAdminUserResponse(user);
   }
 }
