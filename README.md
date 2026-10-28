@@ -38,10 +38,13 @@ npm run test:e2e  # end-to-end tests against the wallet_test database, including
 npm run lint && npm run typecheck
 ```
 
+For manual testing, import `docs/lendsqr-wallet.postman_collection.json` into Postman. It runs top to bottom (two signups, deposit, transfer, replay, block, reconcile), captures tokens and wallet ids automatically, and asserts the expected status on each request. Set `baseUrl` and `adminKey` in the collection variables first.
+
 Environment variables (validated at boot; the app refuses to start if one is wrong):
 
 | Variable                              | Purpose                                                                              |
 | ------------------------------------- | ------------------------------------------------------------------------------------ |
+| `PORT`                                | Listen port, default 3000                                                            |
 | `DATABASE_URL`                        | Postgres connection string                                                           |
 | `JWT_SECRET`                          | 32+ characters; signs access tokens                                                  |
 | `JWT_EXPIRES_IN_SECONDS`              | Token lifetime, default 3600                                                         |
@@ -129,23 +132,24 @@ Responses: `201` created, `400` validation error (unknown fields are rejected to
 
 ### Admin
 
-| Method and path                        | Auth                          | What it does                                                                                                                                                              |
-| -------------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /admin/users/:id/blacklist-check` | `x-admin-key`                 | Re-runs the blacklist check on an existing user's email and phone and reports the result, for someone reported after onboarding. Blocking stays an explicit admin action. |
-|                                        | `POST /admin/users/:id/block` | `x-admin-key`                                                                                                                                                             | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit. |
-| `POST /admin/users/:id/unblock`        | `x-admin-key`                 | Restores the user.                                                                                                                                                        |
-| `GET /admin/reconciliation`            | `x-admin-key`                 | Checks the ledger invariants and reports anything out of balance (see [Reconciliation](#reconciliation)).                                                                 |
+| Method and path                        | Auth          | What it does                                                                                                                                                              |
+| -------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /admin/users/:id/blacklist-check` | `x-admin-key` | Re-runs the blacklist check on an existing user's email and phone and reports the result, for someone reported after onboarding. Blocking stays an explicit admin action. |
+| `POST /admin/users/:id/block`          | `x-admin-key` | Body `{ "reason": "Fraud report" }`. A blocked user cannot send, receive or deposit. Returns the user with `blockedReason` and `blockedAt`.                               |
+| `POST /admin/users/:id/unblock`        | `x-admin-key` | Restores the user.                                                                                                                                                        |
+| `GET /admin/reconciliation`            | `x-admin-key` | Checks the ledger invariants and reports anything out of balance (see [Reconciliation](#reconciliation)).                                                                 |
 
 ### Quick walkthrough with curl
 
 ```bash
 BASE=https://lendsqr-wallet-service-wg2b.onrender.com
 
-# 1. Two users
+# 1. Two users (random suffix so the walkthrough can be run more than once)
+N=$RANDOM
 ADA=$(curl -s -X POST $BASE/auth/signup -H 'content-type: application/json' \
-  -d '{"email":"ada@example.com","phoneNumber":"+2348012345678","firstName":"Ada","lastName":"Obi","password":"correct-horse-battery"}')
+  -d "{\"email\":\"ada$N@example.com\",\"phoneNumber\":\"+23480$(printf %08d $N)\",\"firstName\":\"Ada\",\"lastName\":\"Obi\",\"password\":\"correct-horse-battery\"}")
 BOB=$(curl -s -X POST $BASE/auth/signup -H 'content-type: application/json' \
-  -d '{"email":"bob@example.com","phoneNumber":"+2348012345679","firstName":"Bob","lastName":"Eze","password":"correct-horse-battery"}')
+  -d "{\"email\":\"bob$N@example.com\",\"phoneNumber\":\"+23481$(printf %08d $N)\",\"firstName\":\"Bob\",\"lastName\":\"Eze\",\"password\":\"correct-horse-battery\"}")
 ADA_TOKEN=$(echo $ADA | jq -r .accessToken); BOB_WALLET=$(echo $BOB | jq -r .wallet.id)
 
 # 2. Fund Ada, then pay Bob. Send the transfer twice with the same key: money moves once.
@@ -162,7 +166,7 @@ done
 
 ### Money is an integer in kobo, stored as `bigint`
 
-Floating point cannot represent 0.1 exactly, and `DECIMAL` columns come back from the driver as strings that are easy to mishandle. Integers in the smallest unit are exact, compare correctly and add correctly. The rule is "integer in the currency's minor unit" (the ISO 4217 exponent): NGN has exponent 2, so amounts are kobo; a zero-decimal currency such as JPY or XOF has exponent 0, so amounts would be whole units and nothing in the ledger changes. Only display formatting depends on the exponent, and the API leaves that to the client. Amounts are capped at ₦10,000,000 per operation so every value stays far inside JavaScript's safe-integer range; the `pg` driver is told to parse `bigint` columns as numbers on that basis.
+Floating point cannot represent 0.1 exactly, and `DECIMAL` columns come back from the driver as strings that are easy to mishandle. Integers in the smallest unit are exact, compare correctly and add correctly. The rule is "integer in the currency's minor unit" (the ISO 4217 exponent): NGN has exponent 2, so amounts are kobo; a zero-decimal currency such as JPY or XOF has exponent 0, so amounts would be whole units and nothing in the ledger changes. Only display formatting depends on the exponent, and the API leaves that to the client. Amounts are capped at ₦10,000,000 per operation, and balances stay far below 2^53 in practice, so the `pg` driver is told to parse `bigint` columns as JavaScript numbers; past that scale I would parse to `BigInt`.
 
 ### Double-entry ledger
 
